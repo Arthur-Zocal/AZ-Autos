@@ -39,7 +39,7 @@ export default function WelcomeScreen() {
       <View style={styles.container}>
         <View style={[styles.card, isSmallDevice && styles.cardSmall]}>
           <Image
-            source={require('../../assets/images/logo_azautos2.png')}
+            source={require('../assets/images/logo_azautos2.png')}
             style={[styles.logo, { height: logoHeight }]}
             resizeMode="stretch"
           />

@@ -28,7 +28,7 @@ export default function LoginScreen() {
     }
     Alert.alert('Login', `Bem-vindo, ${email}!`);
     // Redirecionar para a tela principal
-    router.replace('/(tabs)');
+    router.replace('../index');
   };
 
   return (
