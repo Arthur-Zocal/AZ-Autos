@@ -1,33 +1,62 @@
 import { Tabs } from 'expo-router';
-import React from 'react';
+import { Feather } from '@expo/vector-icons';
 
-import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+// Rodapé do app
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        tabBarActiveTintColor: '#d32f2f',
+        tabBarInactiveTintColor: '#666',
         headerShown: false,
-        tabBarButton: HapticTab,
-      }}>
+        tabBarStyle: {
+          paddingBottom: 5,
+          paddingTop: 5,
+          height: 68,
+          backgroundColor: '#fff',
+          borderTopWidth: 1,
+          borderTopColor: '#eee',
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '500',
+        },
+      }}
+    >
       <Tabs.Screen
-        name="index"
+        name="products"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: 'Produtos',
+          tabBarIcon: ({ color }) => <Feather name="shopping-bag" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="about"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: 'Sobre',
+          tabBarIcon: ({ color }) => <Feather name="info" size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Perfil',
+          tabBarIcon: ({ color }) => <Feather name="user" size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="addCar"
+        options={{
+          title: 'Adicionar',
+          tabBarIcon: ({ color }) => <Feather name="plus-circle" size={24} color={color} />,
+          href: null, // Não aparece no rodapé
+        }}
+      />
+      <Tabs.Screen
+        name="editCar"
+        options={{
+          href: null, // Não aparece no rodapé
         }}
       />
     </Tabs>
