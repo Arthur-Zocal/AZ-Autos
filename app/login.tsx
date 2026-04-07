@@ -17,10 +17,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { Feather } from '@expo/vector-icons';
 import { database } from '../services/connectionFirebase';
 import { ref, get, query, orderByChild, equalTo } from 'firebase/database';
-import { Toast } from '../components/toast'; //  Toast
+import { Toast } from '../components/toast';
 
+// ✅ Validação de e-mail genérica (qualquer domínio)
 const isValidEmail = (email: string) => {
-  const emailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+  const emailRegex = /^[^\s@]+@([^\s@]+\.)+[^\s@]+$/;
   return emailRegex.test(email);
 };
 
@@ -139,7 +140,7 @@ export default function LoginScreen() {
       if (!value.trim()) {
         errorMessage = 'E-mail é obrigatório';
       } else if (!isValidEmail(value)) {
-        errorMessage = 'E-mail inválido (exemplo@gmail.com)';
+        errorMessage = 'E-mail inválido';
       } else {
         // Verifica se o e-mail existe no sistema
         setCheckingEmail(true);
@@ -243,7 +244,7 @@ export default function LoginScreen() {
                       styles.input,
                       touched.email && errors.email ? styles.inputError : null,
                     ]}
-                    placeholder="E-mail (exemplo@gmail.com)"
+                    placeholder="E-mail"
                     placeholderTextColor="#999"
                     value={email}
                     onChangeText={text => handleFieldChange('email', text)}

@@ -19,6 +19,12 @@ import { ref, set, get, query, orderByChild, equalTo } from 'firebase/database';
 import { Feather } from '@expo/vector-icons';
 import { Toast } from '../components/toast';
 
+// ✅ Validação de e-mail genérica (qualquer domínio)
+const isValidEmail = (email: string) => {
+  const emailRegex = /^[^\s@]+@([^\s@]+\.)+[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
 const maskPhone = (value: string) => {
   const numbers = value.replace(/\D/g, '');
   if (numbers.length <= 10) {
@@ -26,11 +32,6 @@ const maskPhone = (value: string) => {
   } else {
     return numbers.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
   }
-};
-
-const isValidEmail = (email: string) => {
-  const emailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
-  return emailRegex.test(email);
 };
 
 const isValidPhone = (phone: string) => {
@@ -151,7 +152,7 @@ export default function RegisterScreen() {
         if (!value.trim()) {
           errorMessage = 'E-mail é obrigatório';
         } else if (!isValidEmail(value)) {
-          errorMessage = 'E-mail inválido (exemplo@gmail.com)';
+          errorMessage = 'E-mail inválido (exemplo@dominio.com)';
         } else {
           setCheckingFields(prev => ({ ...prev, email: true }));
           const emailExists = await checkEmailExists(value);
@@ -334,10 +335,8 @@ export default function RegisterScreen() {
         createdAt: new Date().toISOString(),
       });
 
-      // Mostra toast de sucesso
       showToast(`🎉 Conta criada com sucesso! Bem-vindo(a) ${firstName}!`, 'success');
       
-      // Redireciona após 2 segundos
       setTimeout(() => {
         router.replace('/login');
       }, 2000);
@@ -381,7 +380,6 @@ export default function RegisterScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.container}>
-            {/* Toast Component */}
             <Toast
               visible={toastVisible}
               message={toastMessage}
@@ -446,7 +444,7 @@ export default function RegisterScreen() {
                       styles.input,
                       touched.email && errors.email ? styles.inputError : null,
                     ]}
-                    placeholder="E-mail (exemplo@gmail.com)"
+                    placeholder="E-mail"
                     placeholderTextColor="#999"
                     value={email}
                     onChangeText={text => handleFieldChange('email', text)}

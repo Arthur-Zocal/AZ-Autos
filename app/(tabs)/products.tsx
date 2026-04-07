@@ -460,7 +460,7 @@ export default function ProductsScreen() {
                 onPress={handleDeleteCar}
                 disabled={deleting}>
                 {deleting ? (
-                  <ActivityIndicator color="#fff" size="small" />
+                  <ActivityIndicator color="#ffffff" size="small" />
                 ) : (
                   <Text style={styles.confirmDeleteText}>Remover</Text>
                 )}
