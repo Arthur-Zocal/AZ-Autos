@@ -11,13 +11,15 @@ import {
   ActivityIndicator,
   Modal,
   FlatList,
+  Image,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { database } from '../../services/connectionFirebase';
 import { ref, update, get } from 'firebase/database';
 
-// Mesmo database do addCar
 interface CarModelInfo {
   versions: string[];
   yearStart: number;
@@ -197,21 +199,12 @@ const carDatabase: Record<string, Record<string, CarModelInfo>> = {
 
 const availableBrands = Object.keys(carDatabase);
 
-// Função para gerar lista de anos
 const generateYearList = (start: number, end: number): string[] => {
   const years: string[] = [];
   for (let year = start; year <= end; year++) {
     years.push(year.toString());
   }
   return years.reverse();
-};
-
-// URL de imagem pra não ficar sem foto quando postar algo sem foto
-const getValidImageUrl = (url: string): string => {
-  if (!url || url.includes('via.placeholder.com')) {
-    return `https://picsum.photos/400/300?random=${Date.now()}`;
-  }
-  return url;
 };
 
 interface CarData {
@@ -241,7 +234,8 @@ export default function EditCarScreen() {
     year: '',
     km: '',
     price: '',
-    image: '',
+    imageUri: '',
+    currentImageUrl: '',
   });
 
   const [availableNames, setAvailableNames] = useState<string[]>([]);
@@ -249,7 +243,6 @@ export default function EditCarScreen() {
   const [availableYears, setAvailableYears] = useState<string[]>([]);
   const [, setCurrentYearRange] = useState({ start: 2000, end: 2026 });
 
-  // Carregar dados do veículo
   useEffect(() => {
     const loadCarData = async () => {
       if (!id) {
@@ -261,7 +254,7 @@ export default function EditCarScreen() {
       try {
         const carRef = ref(database, `cars/${id}`);
         const snapshot = await get(carRef);
-        
+
         if (snapshot.exists()) {
           const carData = snapshot.val() as CarData;
           setFormData({
@@ -271,23 +264,21 @@ export default function EditCarScreen() {
             year: carData.year ? carData.year.toString() : '',
             km: carData.km ? carData.km.toString() : '',
             price: carData.price ? carData.price.toString() : '',
-            image: carData.image || '',
+            imageUri: '',
+            currentImageUrl: carData.image || '',
           });
 
-          // Carregar opções baseadas na marca selecionada
           if (carData.brand) {
             const names = Object.keys(carDatabase[carData.brand] || {});
             setAvailableNames(names);
-            
+
             if (carData.name) {
               const modelInfo = carDatabase[carData.brand]?.[carData.name];
               if (modelInfo) {
                 setCurrentYearRange({ start: modelInfo.yearStart, end: modelInfo.yearEnd });
                 const years = generateYearList(modelInfo.yearStart, modelInfo.yearEnd);
                 setAvailableYears(years);
-                
-                const versions = modelInfo.versions;
-                setAvailableVersions(versions);
+                setAvailableVersions(modelInfo.versions);
               }
             }
           }
@@ -334,8 +325,7 @@ export default function EditCarScreen() {
         year: years[0] || ''
       }));
 
-      const versions = modelInfo.versions;
-      setAvailableVersions(versions);
+      setAvailableVersions(modelInfo.versions);
     }
     setNameModalVisible(false);
   };
@@ -348,6 +338,46 @@ export default function EditCarScreen() {
   const handleYearSelect = (year: string) => {
     setFormData(prev => ({ ...prev, year }));
     setYearModalVisible(false);
+  };
+
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permissão necessária', 'Precisamos de acesso à sua galeria para selecionar uma imagem.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      setFormData(prev => ({ ...prev, imageUri: result.assets[0].uri }));
+    }
+  };
+
+  const convertImageToBase64 = async (uri: string): Promise<string> => {
+    const manipulatedImage = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 800 } }],
+      { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG }
+    );
+
+    const response = await fetch(manipulatedImage.uri);
+    const blob = await response.blob();
+
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        resolve(base64String);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
   };
 
   const validateForm = () => {
@@ -384,6 +414,12 @@ export default function EditCarScreen() {
 
     setLoading(true);
     try {
+      let finalImage = formData.currentImageUrl;
+
+      if (formData.imageUri) {
+        finalImage = await convertImageToBase64(formData.imageUri);
+      }
+
       const carRef = ref(database, `cars/${id}`);
       const updatedCar = {
         name: formData.name,
@@ -392,7 +428,7 @@ export default function EditCarScreen() {
         year: parseInt(formData.year),
         km: parseInt(formData.km),
         price: parseInt(formData.price),
-        image: getValidImageUrl(formData.image),
+        image: finalImage,
         updatedAt: new Date().toISOString(),
       };
 
@@ -401,16 +437,11 @@ export default function EditCarScreen() {
       Alert.alert(
         'Sucesso!',
         'Veículo atualizado com sucesso!',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.back(),
-          },
-        ]
+        [{ text: 'OK', onPress: () => router.back() }]
       );
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao atualizar veículo:', error);
-      Alert.alert('Erro', 'Não foi possível atualizar o veículo. Tente novamente.');
+      Alert.alert('Erro', `Não foi possível atualizar o veículo.\n${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -440,14 +471,8 @@ export default function EditCarScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.formCard}>
           <Text style={styles.label}>Marca</Text>
-          <TouchableOpacity
-            style={styles.selector}
-            onPress={() => setBrandModalVisible(true)}
-          >
-            <Text style={[
-              styles.selectorText,
-              !formData.brand && styles.selectorPlaceholder
-            ]}>
+          <TouchableOpacity style={styles.selector} onPress={() => setBrandModalVisible(true)}>
+            <Text style={[styles.selectorText, !formData.brand && styles.selectorPlaceholder]}>
               {formData.brand || 'Selecione uma marca'}
             </Text>
             <Feather name="chevron-down" size={20} color="#999" />
@@ -521,17 +546,40 @@ export default function EditCarScreen() {
             onChangeText={(text) => handleChange('price', text)}
           />
 
-          <Text style={styles.label}>URL da Imagem</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="https://exemplo.com/imagem.jpg"
-            placeholderTextColor="#999"
-            value={formData.image}
-            onChangeText={(text) => handleChange('image', text)}
-          />
-          <Text style={styles.helperText}>
-            Não se esqueça da imagem, caso esqueça, por padrão será usada uma imagem aleatória para representar o veículo.
-          </Text>
+          <Text style={styles.label}>Imagem do Veículo</Text>
+
+          {!formData.imageUri && formData.currentImageUrl ? (
+            <View style={styles.imagePreviewContainer}>
+              <Image source={{ uri: formData.currentImageUrl }} style={styles.imagePreview} />
+              <Text style={styles.currentImageLabel}>Imagem atual</Text>
+            </View>
+          ) : null}
+
+          <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage}>
+            <Feather name="camera" size={20} color="#fff" />
+            <Text style={styles.imagePickerButtonText}>
+              {formData.currentImageUrl ? 'Trocar Imagem' : 'Selecionar Imagem'}
+            </Text>
+          </TouchableOpacity>
+
+          {formData.imageUri ? (
+            <View style={styles.imagePreviewContainer}>
+              <Image source={{ uri: formData.imageUri }} style={styles.imagePreview} />
+              <TouchableOpacity
+                style={styles.removeImageButton}
+                onPress={() => setFormData(prev => ({ ...prev, imageUri: '' }))}
+              >
+                <Feather name="x" size={20} color="#fff" />
+              </TouchableOpacity>
+              <Text style={styles.newImageLabel}>Nova imagem selecionada</Text>
+            </View>
+          ) : null}
+
+          {!formData.imageUri && !formData.currentImageUrl && (
+            <Text style={styles.helperText}>
+              Nenhuma imagem selecionada. Toque no botão acima para escolher uma foto.
+            </Text>
+          )}
 
           <TouchableOpacity
             style={[styles.submitButton, loading && styles.buttonDisabled]}
@@ -550,7 +598,7 @@ export default function EditCarScreen() {
         </View>
       </ScrollView>
 
-      {/* Modal para a marca do carro */}
+      {/* Modal Marca */}
       <Modal visible={brandModalVisible} transparent animationType="slide" onRequestClose={() => setBrandModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -580,7 +628,7 @@ export default function EditCarScreen() {
         </View>
       </Modal>
 
-      {/* Modal para o nome do carro */}
+      {/* Modal Nome */}
       <Modal visible={nameModalVisible} transparent animationType="slide" onRequestClose={() => setNameModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -615,7 +663,7 @@ export default function EditCarScreen() {
         </View>
       </Modal>
 
-      {/* Modal para a versão do carro */}
+      {/* Modal Versão */}
       <Modal visible={versionModalVisible} transparent animationType="slide" onRequestClose={() => setVersionModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -645,7 +693,7 @@ export default function EditCarScreen() {
         </View>
       </Modal>
 
-      {/* Modal para o ano do carro */}
+      {/* Modal Ano */}
       <Modal visible={yearModalVisible} transparent animationType="slide" onRequestClose={() => setYearModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -773,6 +821,65 @@ const styles = StyleSheet.create({
     color: '#999',
     marginTop: 4,
     marginBottom: 8,
+  },
+  imagePickerButton: {
+    backgroundColor: '#d32f2f',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  imagePickerButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+    marginBottom: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  imagePreview: {
+    width: '100%',
+    height: 200,
+    resizeMode: 'cover',
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 20,
+    padding: 4,
+  },
+  currentImageLabel: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    color: '#fff',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    fontSize: 12,
+  },
+  newImageLabel: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: 'rgba(76, 175, 80, 0.8)',
+    color: '#fff',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    fontSize: 12,
   },
   submitButton: {
     backgroundColor: '#d32f2f',

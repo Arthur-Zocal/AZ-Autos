@@ -11,13 +11,15 @@ import {
   ActivityIndicator,
   Modal,
   FlatList,
+  Image,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { database } from '../../services/connectionFirebase';
 import { ref, push } from 'firebase/database';
 
-// Lista marca, modelo, versão e ano
 interface CarModelInfo {
   versions: string[];
   yearStart: number;
@@ -197,7 +199,6 @@ const carDatabase: Record<string, Record<string, CarModelInfo>> = {
 
 const availableBrands = Object.keys(carDatabase);
 
-// Função para gerar lista de anos
 const generateYearList = (start: number, end: number): string[] => {
   const years: string[] = [];
   for (let year = start; year <= end; year++) {
@@ -206,26 +207,15 @@ const generateYearList = (start: number, end: number): string[] => {
   return years.reverse();
 };
 
-// URL de imagem pra não ficar sem foto quando postar algo sem foto
-const getValidImageUrl = (url: string): string => {
-  if (!url || url.includes('via.placeholder.com')) {
-    return `https://picsum.photos/400/300?random=${Date.now()}`;
-  }
-  return url;
-};
-
-// limpa o formulario pra add carro
-const resetFormData = () => {
-  return {
-    name: '',
-    brand: '',
-    model: '',
-    year: '',
-    km: '',
-    price: '',
-    image: '',
-  };
-};
+const resetFormData = () => ({
+  name: '',
+  brand: '',
+  model: '',
+  year: '',
+  km: '',
+  price: '',
+  imageUri: '',
+});
 
 export default function AddCarScreen() {
   const router = useRouter();
@@ -236,7 +226,6 @@ export default function AddCarScreen() {
   const [yearModalVisible, setYearModalVisible] = useState(false);
 
   const [formData, setFormData] = useState(resetFormData());
-
   const [availableNames, setAvailableNames] = useState<string[]>([]);
   const [availableVersions, setAvailableVersions] = useState<string[]>([]);
   const [availableYears, setAvailableYears] = useState<string[]>([]);
@@ -285,6 +274,47 @@ export default function AddCarScreen() {
     setYearModalVisible(false);
   };
 
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permissão necessária', 'Precisamos de acesso à sua galeria para selecionar uma imagem.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      setFormData(prev => ({ ...prev, imageUri: result.assets[0].uri }));
+    }
+  };
+
+  const convertImageToBase64 = async (uri: string): Promise<string> => {
+    // Redimensiona e comprime a imagem para reduzir o tamanho
+    const manipulatedImage = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 800 } }],
+      { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG }
+    );
+
+    const response = await fetch(manipulatedImage.uri);
+    const blob = await response.blob();
+
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        resolve(base64String);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
   const validateForm = () => {
     if (!formData.brand.trim()) {
       Alert.alert('Erro', 'Marca é obrigatória');
@@ -310,6 +340,10 @@ export default function AddCarScreen() {
       Alert.alert('Erro', 'Preço inválido');
       return false;
     }
+    if (!formData.imageUri) {
+      Alert.alert('Erro', 'Selecione uma imagem para o veículo');
+      return false;
+    }
     return true;
   };
 
@@ -318,6 +352,8 @@ export default function AddCarScreen() {
 
     setLoading(true);
     try {
+      const imageBase64 = await convertImageToBase64(formData.imageUri);
+
       const carsRef = ref(database, 'cars');
       const newCar = {
         name: formData.name,
@@ -326,7 +362,7 @@ export default function AddCarScreen() {
         year: parseInt(formData.year),
         km: parseInt(formData.km),
         price: parseInt(formData.price),
-        image: getValidImageUrl(formData.image),
+        image: imageBase64,
         createdAt: new Date().toISOString(),
       };
 
@@ -341,16 +377,11 @@ export default function AddCarScreen() {
       Alert.alert(
         'Sucesso!',
         'Veículo adicionado com sucesso!',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.back(),
-          },
-        ]
+        [{ text: 'OK', onPress: () => router.back() }]
       );
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao adicionar veículo:', error);
-      Alert.alert('Erro', 'Não foi possível adicionar o veículo. Tente novamente.');
+      Alert.alert('Erro', `Não foi possível adicionar o veículo.\n${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -369,14 +400,8 @@ export default function AddCarScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.formCard}>
           <Text style={styles.label}>Marca</Text>
-          <TouchableOpacity
-            style={styles.selector}
-            onPress={() => setBrandModalVisible(true)}
-          >
-            <Text style={[
-              styles.selectorText,
-              !formData.brand && styles.selectorPlaceholder
-            ]}>
+          <TouchableOpacity style={styles.selector} onPress={() => setBrandModalVisible(true)}>
+            <Text style={[styles.selectorText, !formData.brand && styles.selectorPlaceholder]}>
               {formData.brand || 'Selecione uma marca'}
             </Text>
             <Feather name="chevron-down" size={20} color="#999" />
@@ -450,17 +475,27 @@ export default function AddCarScreen() {
             onChangeText={(text) => handleChange('price', text)}
           />
 
-          <Text style={styles.label}>URL da Imagem</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="https://exemplo.com/imagem.jpg"
-            placeholderTextColor="#999"
-            value={formData.image}
-            onChangeText={(text) => handleChange('image', text)}
-          />
-          <Text style={styles.helperText}>
-             Não se esqueça da imagem, caso esqueça, por padrão será usada uma imagem aleatória para representar o veículo.
-          </Text>
+          <Text style={styles.label}>Imagem do Veículo</Text>
+          <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage}>
+            <Feather name="camera" size={20} color="#fff" />
+            <Text style={styles.imagePickerButtonText}>Selecionar Imagem</Text>
+          </TouchableOpacity>
+
+          {formData.imageUri ? (
+            <View style={styles.imagePreviewContainer}>
+              <Image source={{ uri: formData.imageUri }} style={styles.imagePreview} />
+              <TouchableOpacity
+                style={styles.removeImageButton}
+                onPress={() => setFormData(prev => ({ ...prev, imageUri: '' }))}
+              >
+                <Feather name="x" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <Text style={styles.helperText}>
+              Nenhuma imagem selecionada. Toque no botão acima para escolher uma foto.
+            </Text>
+          )}
 
           <TouchableOpacity
             style={[styles.submitButton, loading && styles.buttonDisabled]}
@@ -479,7 +514,7 @@ export default function AddCarScreen() {
         </View>
       </ScrollView>
 
-      {/*modal para a marca do carro */}
+      {/* Modal Marca */}
       <Modal visible={brandModalVisible} transparent animationType="slide" onRequestClose={() => setBrandModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -509,7 +544,7 @@ export default function AddCarScreen() {
         </View>
       </Modal>
 
-      {/*modal para o nome do carro */}
+      {/* Modal Nome */}
       <Modal visible={nameModalVisible} transparent animationType="slide" onRequestClose={() => setNameModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -544,7 +579,7 @@ export default function AddCarScreen() {
         </View>
       </Modal>
 
-      {/*modal para a versão do carro */}
+      {/* Modal Versão */}
       <Modal visible={versionModalVisible} transparent animationType="slide" onRequestClose={() => setVersionModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -574,7 +609,7 @@ export default function AddCarScreen() {
         </View>
       </Modal>
 
-      {/*modal para o ano do carro */}
+      {/* Modal Ano */}
       <Modal visible={yearModalVisible} transparent animationType="slide" onRequestClose={() => setYearModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -692,6 +727,43 @@ const styles = StyleSheet.create({
     color: '#999',
     marginTop: 4,
     marginBottom: 8,
+  },
+  imagePickerButton: {
+    backgroundColor: '#d32f2f',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  imagePickerButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+    marginBottom: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  imagePreview: {
+    width: '100%',
+    height: 200,
+    resizeMode: 'cover',
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 20,
+    padding: 4,
   },
   submitButton: {
     backgroundColor: '#d32f2f',

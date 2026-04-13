@@ -21,10 +21,10 @@ import { ref, onValue, remove } from 'firebase/database';
 import { useRouter } from 'expo-router';
 import { useAdmin } from '../../hooks/useAdmin';
 
-// Filtro
+// Filtros (mantidos iguais)
 const brands = [
-  'Todas', 'Fiat', 'Volkswagen', 'Chevrolet', 'Ford', 'Hyundai', 
-  'Toyota', 'Renault', 'Honda', 'Nissan', 'Peugeot', 'Citroën', 
+  'Todas', 'Fiat', 'Volkswagen', 'Chevrolet', 'Ford', 'Hyundai',
+  'Toyota', 'Renault', 'Honda', 'Nissan', 'Peugeot', 'Citroën',
   'Mitsubishi', 'Jeep', 'Caoa Chery'
 ];
 
@@ -56,28 +56,16 @@ interface Car {
   image: string;
 }
 
-// Função auxiliar para obter URL de imagem válida
-const getValidImageUrl = (url: string, id: string) => {
-  if (!url) {
-    return `https://picsum.photos/150/150?random=${id}`;
-  }
-  if (url.includes('via.placeholder.com') || url.includes('undefined') || url.includes('null')) {
-    return `https://picsum.photos/150/150?random=${id}`;
-  }
-  return url;
-};
-
 export default function ProductsScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
-  
-  // Responsiva - determina número de colunas baseado na largura
+
   const calculateNumColumns = useCallback(() => {
-    if (width >= 1024) return 3; // Tablet/Desktop grande
-    if (width >= 768) return 2; // Tablet médio
-    return 2; // Celular - mantém 2 colunas
+    if (width >= 1024) return 3;
+    if (width >= 768) return 2;
+    return 2;
   }, [width]);
-  
+
   const [numColumns, setNumColumns] = useState(calculateNumColumns());
   const { isAdmin, loading: adminLoading } = useAdmin();
 
@@ -85,9 +73,7 @@ export default function ProductsScreen() {
     const updateColumns = () => {
       setNumColumns(calculateNumColumns());
     };
-    
     const subscription = Dimensions.addEventListener('change', updateColumns);
-    
     return () => {
       subscription?.remove();
     };
@@ -95,7 +81,7 @@ export default function ProductsScreen() {
 
   const [cars, setCars] = useState<Car[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   const [searchText, setSearchText] = useState('');
   const [selectedBrand, setSelectedBrand] = useState('Todas');
   const [selectedYear, setSelectedYear] = useState('Todos');
@@ -113,7 +99,6 @@ export default function ProductsScreen() {
   const [selectedCar, setSelectedCar] = useState<Car | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Buscar carros
   useEffect(() => {
     const carsRef = ref(database, 'cars');
     const unsubscribe = onValue(carsRef, (snapshot) => {
@@ -184,7 +169,7 @@ export default function ProductsScreen() {
 
   const handleDeleteCar = async () => {
     if (!selectedCar) return;
-    
+
     setDeleting(true);
     try {
       const carRef = ref(database, `cars/${selectedCar.id}`);
@@ -212,12 +197,12 @@ export default function ProductsScreen() {
       }
 
       if (selectedBrand !== 'Todas' && car.brand !== selectedBrand) return false;
-      
+
       if (selectedYear !== 'Todos') {
         const yearNum = parseInt(selectedYear);
         if (!isNaN(yearNum) && car.year !== yearNum) return false;
       }
-      
+
       if (car.km < selectedKmRange.min || car.km > selectedKmRange.max) return false;
       if (car.price < selectedPriceRange.min || car.price > selectedPriceRange.max) return false;
 
@@ -237,16 +222,16 @@ export default function ProductsScreen() {
   const cardWidth = getCardWidth();
 
   const renderCarCard = ({ item, index }: { item: Car; index: number }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={[
-        styles.card, 
-        { 
+        styles.card,
+        {
           width: cardWidth,
           marginLeft: index % numColumns === 0 ? 0 : 16,
         }
       ]}>
-      <Image 
-        source={{ uri: getValidImageUrl(item.image, item.id) }} 
+      <Image
+        source={{ uri: item.image }} // Agora direto, sem fallback aleatório
         style={[styles.cardImage, { height: cardWidth * 0.7 }]}
       />
       <View style={styles.cardInfo}>
@@ -256,12 +241,12 @@ export default function ProductsScreen() {
         <Text style={styles.cardPrice}>{`R$ ${item.price.toLocaleString('pt-BR')}`}</Text>
         {isAdmin && (
           <View style={styles.actionButtons}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.editButton}
               onPress={() => confirmEdit(item)}>
               <Feather name="edit-2" size={16} color="#fff" />
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.deleteButton}
               onPress={() => confirmDelete(item)}>
               <Feather name="trash-2" size={16} color="#fff" />
@@ -293,8 +278,8 @@ export default function ProductsScreen() {
               <Feather name="filter" size={24} color="#fff" />
             </TouchableOpacity>
             {isAdmin && (
-              <TouchableOpacity 
-                onPress={() => router.push('/addCar')} 
+              <TouchableOpacity
+                onPress={() => router.push('/addCar')}
                 style={styles.headerButton}>
                 <Feather name="plus" size={24} color="#fff" />
               </TouchableOpacity>
@@ -336,7 +321,7 @@ export default function ProductsScreen() {
         />
       </View>
 
-      {/* Modal dos Filtros */}
+      {/* Modal dos Filtros (mantido exatamente igual) */}
       <Modal visible={filterModalVisible} transparent animationType="none">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -380,7 +365,7 @@ export default function ProductsScreen() {
                   }}
                 />
                 {tempYear !== 'Todos' && (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.clearYearButton}
                     onPress={() => setTempYear('Todos')}>
                     <Feather name="x" size={18} color="#666" />
@@ -437,7 +422,7 @@ export default function ProductsScreen() {
               <Feather name="alert-triangle" size={40} color="#d32f2f" />
               <Text style={styles.deleteModalTitle}>Remover Veículo</Text>
             </View>
-            
+
             <Text style={styles.deleteModalText}>
               {`Tem certeza que deseja remover o veículo "${selectedCar?.name} ${selectedCar?.model}"?`}
             </Text>
@@ -446,7 +431,7 @@ export default function ProductsScreen() {
             </Text>
 
             <View style={styles.deleteModalActions}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.cancelDeleteButton}
                 onPress={() => {
                   setDeleteModalVisible(false);
@@ -454,8 +439,8 @@ export default function ProductsScreen() {
                 }}>
                 <Text style={styles.cancelDeleteText}>Cancelar</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={[styles.confirmDeleteButton, deleting && styles.buttonDisabled]}
                 onPress={handleDeleteCar}
                 disabled={deleting}>
@@ -473,6 +458,7 @@ export default function ProductsScreen() {
   );
 }
 
+// Estilos (mantidos exatamente iguais)
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
