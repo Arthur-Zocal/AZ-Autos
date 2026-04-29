@@ -15,18 +15,12 @@ import {
 import { Link, useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 import { Feather } from '@expo/vector-icons';
-import { database } from '../services/connectionFirebase';
-import { ref, get, query, orderByChild, equalTo } from 'firebase/database';
 import { Toast } from '../components/toast';
 
-// ✅ Validação de e-mail genérica (qualquer domínio)
+// ✅ Validação de e-mail genérica
 const isValidEmail = (email: string) => {
   const emailRegex = /^[^\s@]+@([^\s@]+\.)+[^\s@]+$/;
   return emailRegex.test(email);
-};
-
-const isValidPassword = (password: string) => {
-  return password.length >= 6;
 };
 
 export default function LoginScreen() {
@@ -40,12 +34,10 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   
-  // Estado para o Toast
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
   
-  const [checkingEmail, setCheckingEmail] = useState(false);
   const [touched, setTouched] = useState({
     email: false,
     password: false,
@@ -95,45 +87,7 @@ export default function LoginScreen() {
     setToastVisible(true);
   };
 
-  const checkEmailExists = async (emailToCheck: string): Promise<boolean> => {
-    if (!emailToCheck || !isValidEmail(emailToCheck)) return false;
-    
-    try {
-      const usersRef = ref(database, 'users');
-      const emailQuery = query(usersRef, orderByChild('email'), equalTo(emailToCheck));
-      const snapshot = await get(emailQuery);
-      return snapshot.exists();
-    } catch (error) {
-      console.error('Erro ao verificar e-mail:', error);
-      return false;
-    }
-  };
-
-  const handleFieldChange = (field: 'email' | 'password', value: string) => {
-    if (field === 'email') {
-      setEmail(value);
-      if (errors.email === 'E-mail não cadastrado no sistema') {
-        setErrors(prev => ({ ...prev, email: '' }));
-      }
-    } else {
-      setPassword(value);
-      if (value === '') {
-        setShowPassword(false);
-      }
-    }
-
-    if (touched[field]) {
-      validateField(field, value);
-    }
-  };
-
-  const handleBlur = async (field: 'email' | 'password') => {
-    setTouched(prev => ({ ...prev, [field]: true }));
-    const value = field === 'email' ? email : password;
-    await validateField(field, value);
-  };
-
-  const validateField = async (field: 'email' | 'password', value: string): Promise<string> => {
+  const validateField = (field: 'email' | 'password', value: string): string => {
     let errorMessage = '';
 
     if (field === 'email') {
@@ -141,21 +95,10 @@ export default function LoginScreen() {
         errorMessage = 'E-mail é obrigatório';
       } else if (!isValidEmail(value)) {
         errorMessage = 'E-mail inválido';
-      } else {
-        // Verifica se o e-mail existe no sistema
-        setCheckingEmail(true);
-        const emailExists = await checkEmailExists(value);
-        setCheckingEmail(false);
-        
-        if (!emailExists) {
-          errorMessage = 'E-mail não cadastrado no sistema';
-        }
       }
     } else if (field === 'password') {
       if (!value) {
         errorMessage = 'Senha é obrigatória';
-      } else if (!isValidPassword(value)) {
-        errorMessage = 'Senha deve ter pelo menos 6 caracteres';
       }
     }
 
@@ -163,26 +106,43 @@ export default function LoginScreen() {
     return errorMessage;
   };
 
-  const validateForm = async (): Promise<boolean> => {
+  const handleFieldChange = (field: 'email' | 'password', value: string) => {
+    if (field === 'email') {
+      setEmail(value);
+    } else {
+      setPassword(value);
+      if (value === '') setShowPassword(false);
+    }
+
+    if (touched[field]) {
+      validateField(field, value);
+    }
+  };
+
+  const handleBlur = (field: 'email' | 'password') => {
+    setTouched(prev => ({ ...prev, [field]: true }));
+    const value = field === 'email' ? email : password;
+    validateField(field, value);
+  };
+
+  const validateForm = (): boolean => {
     setTouched({ email: true, password: true });
-    const emailError = await validateField('email', email);
-    const passwordError = await validateField('password', password);
+    const emailError = validateField('email', email);
+    const passwordError = validateField('password', password);
     return !emailError && !passwordError;
   };
 
   const handleLogin = async () => {
-    const isValid = await validateForm();
-    if (!isValid) {
-      showToast('Por favor, corrija os erros no formulário.', 'error');
+    if (!validateForm()) {
+      showToast('Preencha todos os campos corretamente.', 'error');
       return;
     }
 
     setLoading(true);
     try {
       await signIn(email, password);
-      showToast(`Login realizado com sucesso!`, 'success');
+      showToast('Login realizado com sucesso!', 'success');
       
-      // Redireciona após 1.5 segundos
       setTimeout(() => {
         router.replace('/(tabs)/products');
       }, 1500);
@@ -191,13 +151,14 @@ export default function LoginScreen() {
       console.error('Erro no login:', error);
       
       let errorMessage = 'E-mail ou senha incorretos.';
-      
-      if (error.message.includes('user-not-found')) {
-        errorMessage = 'Usuário não encontrado. Verifique seu e-mail.';
-      } else if (error.message.includes('wrong-password')) {
-        errorMessage = 'Senha incorreta. Tente novamente.';
-      } else if (error.message.includes('invalid-email')) {
+      if (error.code === 'auth/user-not-found') {
+        errorMessage = 'Usuário não encontrado.';
+      } else if (error.code === 'auth/wrong-password') {
+        errorMessage = 'Senha incorreta.';
+      } else if (error.code === 'auth/invalid-email') {
         errorMessage = 'E-mail inválido.';
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = 'Muitas tentativas. Tente mais tarde.';
       }
       
       showToast(errorMessage, 'error');
@@ -218,7 +179,6 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.container}>
-            {/* Toast Component */}
             <Toast
               visible={toastVisible}
               message={toastMessage}
@@ -226,7 +186,6 @@ export default function LoginScreen() {
               onHide={() => setToastVisible(false)}
             />
 
-            {/* Logo */}
             <View style={styles.logoContainer}>
               <View style={styles.logoCircle}>
                 <Text style={styles.logoText}>AZ</Text>
@@ -251,13 +210,8 @@ export default function LoginScreen() {
                     onBlur={() => handleBlur('email')}
                     keyboardType="email-address"
                     autoCapitalize="none"
-                    editable={!loading && !checkingEmail}
+                    editable={!loading}
                   />
-                  {checkingEmail && touched.email && email.length > 0 && (
-                    <View style={styles.checkingIndicator}>
-                      <ActivityIndicator size="small" color="#d32f2f" />
-                    </View>
-                  )}
                 </View>
                 {touched.email && errors.email ? (
                   <Text style={styles.errorText}>{errors.email}</Text>
@@ -300,9 +254,9 @@ export default function LoginScreen() {
               </View>
 
               <TouchableOpacity
-                style={[styles.button, (loading || checkingEmail) && styles.buttonDisabled]}
+                style={[styles.button, loading && styles.buttonDisabled]}
                 onPress={handleLogin}
-                disabled={loading || checkingEmail}
+                disabled={loading}
                 activeOpacity={0.8}
               >
                 {loading ? (
@@ -314,7 +268,9 @@ export default function LoginScreen() {
 
               <Link href="/register" asChild>
                 <TouchableOpacity style={styles.linkButton} disabled={loading} activeOpacity={0.7}>
-                  <Text style={styles.linkText}>Não tem uma conta? <Text style={styles.linkHighlight}>Cadastre-se</Text></Text>
+                  <Text style={styles.linkText}>
+                    Não tem uma conta? <Text style={styles.linkHighlight}>Cadastre-se</Text>
+                  </Text>
                 </TouchableOpacity>
               </Link>
             </View>
@@ -373,10 +329,7 @@ const styles = StyleSheet.create({
     padding: 32,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 8,
@@ -427,11 +380,6 @@ const styles = StyleSheet.create({
     right: 12,
     top: 14,
     padding: 4,
-  },
-  checkingIndicator: {
-    position: 'absolute',
-    right: 12,
-    top: 14,
   },
   errorText: {
     color: '#d32f2f',
