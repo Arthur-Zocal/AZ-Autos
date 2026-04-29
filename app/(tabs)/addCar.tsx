@@ -1,25 +1,13 @@
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  Modal,
-  FlatList,
-  Image,
+  View, Text, StyleSheet, SafeAreaView, TextInput, TouchableOpacity,
+  ScrollView, Alert, ActivityIndicator, Modal, FlatList,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
-import { database } from '../../services/connectionFirebase';
-import { ref, push } from 'firebase/database';
+import { fetchCars, updateCars, Car } from '../../services/jsonbinService';
 
+// ---------- Banco de marcas/modelos (COMPLETO) ----------
 interface CarModelInfo {
   versions: string[];
   yearStart: number;
@@ -207,31 +195,44 @@ const generateYearList = (start: number, end: number): string[] => {
   return years.reverse();
 };
 
-const resetFormData = () => ({
+// ---------- Interface do formulário ----------
+interface FormData {
+  name: string;
+  brand: string;
+  model: string;
+  year: string;
+  km: string;
+  price: string;
+  imageUrl: string;
+}
+
+const resetFormData = (): FormData => ({
   name: '',
   brand: '',
   model: '',
   year: '',
   km: '',
   price: '',
-  imageUri: '',
+  imageUrl: '',
 });
 
+// ---------- Componente ----------
 export default function AddCarScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const [brandModalVisible, setBrandModalVisible] = useState(false);
   const [nameModalVisible, setNameModalVisible] = useState(false);
   const [versionModalVisible, setVersionModalVisible] = useState(false);
   const [yearModalVisible, setYearModalVisible] = useState(false);
 
-  const [formData, setFormData] = useState(resetFormData());
+  const [formData, setFormData] = useState<FormData>(resetFormData());
   const [availableNames, setAvailableNames] = useState<string[]>([]);
   const [availableVersions, setAvailableVersions] = useState<string[]>([]);
   const [availableYears, setAvailableYears] = useState<string[]>([]);
   const [, setCurrentYearRange] = useState({ start: 2000, end: 2026 });
 
-  const handleChange = (field: string, value: string) => {
+  const handleChange = (field: keyof FormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -250,16 +251,8 @@ export default function AddCarScreen() {
       setCurrentYearRange({ start: modelInfo.yearStart, end: modelInfo.yearEnd });
       const years = generateYearList(modelInfo.yearStart, modelInfo.yearEnd);
       setAvailableYears(years);
-
-      setFormData(prev => ({
-        ...prev,
-        name,
-        model: '',
-        year: years[0] || ''
-      }));
-
-      const versions = modelInfo.versions;
-      setAvailableVersions(versions);
+      setFormData(prev => ({ ...prev, name, model: '', year: years[0] || '' }));
+      setAvailableVersions(modelInfo.versions);
     }
     setNameModalVisible(false);
   };
@@ -274,111 +267,43 @@ export default function AddCarScreen() {
     setYearModalVisible(false);
   };
 
-  const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permissão necessária', 'Precisamos de acesso à sua galeria para selecionar uma imagem.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      setFormData(prev => ({ ...prev, imageUri: result.assets[0].uri }));
-    }
-  };
-
-  const convertImageToBase64 = async (uri: string): Promise<string> => {
-    // Redimensiona e comprime a imagem para reduzir o tamanho
-    const manipulatedImage = await ImageManipulator.manipulateAsync(
-      uri,
-      [{ resize: { width: 800 } }],
-      { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG }
-    );
-
-    const response = await fetch(manipulatedImage.uri);
-    const blob = await response.blob();
-
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        resolve(base64String);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  };
-
   const validateForm = () => {
-    if (!formData.brand.trim()) {
-      Alert.alert('Erro', 'Marca é obrigatória');
-      return false;
-    }
-    if (!formData.name.trim()) {
-      Alert.alert('Erro', 'Nome do veículo é obrigatório');
-      return false;
-    }
-    if (!formData.model.trim()) {
-      Alert.alert('Erro', 'Versão/Modelo é obrigatório');
-      return false;
-    }
-    if (!formData.year.trim() || isNaN(Number(formData.year))) {
-      Alert.alert('Erro', 'Ano inválido');
-      return false;
-    }
-    if (!formData.km.trim() || isNaN(Number(formData.km))) {
-      Alert.alert('Erro', 'Quilometragem inválida');
-      return false;
-    }
-    if (!formData.price.trim() || isNaN(Number(formData.price))) {
-      Alert.alert('Erro', 'Preço inválido');
-      return false;
-    }
-    if (!formData.imageUri) {
-      Alert.alert('Erro', 'Selecione uma imagem para o veículo');
-      return false;
-    }
+    if (!formData.brand.trim()) { Alert.alert('Erro', 'Marca é obrigatória'); return false; }
+    if (!formData.name.trim()) { Alert.alert('Erro', 'Nome do veículo é obrigatório'); return false; }
+    if (!formData.model.trim()) { Alert.alert('Erro', 'Versão/Modelo é obrigatório'); return false; }
+    if (!formData.year.trim() || isNaN(Number(formData.year))) { Alert.alert('Erro', 'Ano inválido'); return false; }
+    if (!formData.km.trim() || isNaN(Number(formData.km))) { Alert.alert('Erro', 'Quilometragem inválida'); return false; }
+    if (!formData.price.trim() || isNaN(Number(formData.price))) { Alert.alert('Erro', 'Preço inválido'); return false; }
+    if (!formData.imageUrl.trim()) { Alert.alert('Erro', 'URL da imagem é obrigatória'); return false; }
     return true;
   };
 
   const handleSubmit = async () => {
     if (!validateForm()) return;
-
     setLoading(true);
     try {
-      const imageBase64 = await convertImageToBase64(formData.imageUri);
-
-      const carsRef = ref(database, 'cars');
-      const newCar = {
+      const newCar: Car = {
+        id: Date.now().toString(36) + Math.random().toString(36).substring(2),
         name: formData.name,
         brand: formData.brand,
         model: formData.model,
         year: parseInt(formData.year),
         km: parseInt(formData.km),
         price: parseInt(formData.price),
-        image: imageBase64,
+        image: formData.imageUrl.trim(),
         createdAt: new Date().toISOString(),
       };
 
-      await push(carsRef, newCar);
+      const currentCars = await fetchCars();
+      const updatedCars = [...currentCars, newCar];
+      await updateCars(updatedCars);
 
       setFormData(resetFormData());
-      setAvailableNames([]);
-      setAvailableVersions([]);
-      setAvailableYears([]);
-      setCurrentYearRange({ start: 2000, end: 2026 });
-
-      Alert.alert(
-        'Sucesso!',
-        'Veículo adicionado com sucesso!',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
+      setSuccessMessage('✓ Veículo adicionado com sucesso!');
+      setTimeout(() => {
+        setSuccessMessage('');
+        router.replace('/(tabs)/products');
+      }, 2000);
     } catch (error: any) {
       console.error('Erro ao adicionar veículo:', error);
       Alert.alert('Erro', `Não foi possível adicionar o veículo.\n${error.message}`);
@@ -387,6 +312,7 @@ export default function AddCarScreen() {
     }
   };
 
+  // ---------- Renderização ----------
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -398,7 +324,15 @@ export default function AddCarScreen() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {successMessage !== '' && (
+          <View style={styles.successBanner}>
+            <Feather name="check-circle" size={20} color="#2e7d32" />
+            <Text style={styles.successText}>{successMessage}</Text>
+          </View>
+        )}
+
         <View style={styles.formCard}>
+          {/* Marca */}
           <Text style={styles.label}>Marca</Text>
           <TouchableOpacity style={styles.selector} onPress={() => setBrandModalVisible(true)}>
             <Text style={[styles.selectorText, !formData.brand && styles.selectorPlaceholder]}>
@@ -407,54 +341,46 @@ export default function AddCarScreen() {
             <Feather name="chevron-down" size={20} color="#999" />
           </TouchableOpacity>
 
+          {/* Nome do Veículo */}
           <Text style={styles.label}>Nome do Veículo</Text>
           <TouchableOpacity
             style={[styles.selector, !formData.brand && styles.selectorDisabled]}
             onPress={() => formData.brand && setNameModalVisible(true)}
             disabled={!formData.brand}
           >
-            <Text style={[
-              styles.selectorText,
-              !formData.name && styles.selectorPlaceholder,
-              !formData.brand && styles.selectorDisabledText
-            ]}>
+            <Text style={[styles.selectorText, !formData.name && styles.selectorPlaceholder, !formData.brand && styles.selectorDisabledText]}>
               {formData.name || (formData.brand ? 'Selecione o modelo' : 'Primeiro selecione a marca')}
             </Text>
             {formData.brand && <Feather name="chevron-down" size={20} color="#999" />}
           </TouchableOpacity>
 
+          {/* Versão ou Modelo */}
           <Text style={styles.label}>Versão ou Modelo</Text>
           <TouchableOpacity
             style={[styles.selector, !formData.name && styles.selectorDisabled]}
             onPress={() => formData.name && setVersionModalVisible(true)}
             disabled={!formData.name}
           >
-            <Text style={[
-              styles.selectorText,
-              !formData.model && styles.selectorPlaceholder,
-              !formData.name && styles.selectorDisabledText
-            ]}>
+            <Text style={[styles.selectorText, !formData.model && styles.selectorPlaceholder, !formData.name && styles.selectorDisabledText]}>
               {formData.model || (formData.name ? 'Selecione a versão' : 'Primeiro selecione o modelo')}
             </Text>
             {formData.name && <Feather name="chevron-down" size={20} color="#999" />}
           </TouchableOpacity>
 
+          {/* Ano */}
           <Text style={styles.label}>Ano</Text>
           <TouchableOpacity
             style={[styles.selector, !formData.name && styles.selectorDisabled]}
             onPress={() => formData.name && setYearModalVisible(true)}
             disabled={!formData.name}
           >
-            <Text style={[
-              styles.selectorText,
-              !formData.year && styles.selectorPlaceholder,
-              !formData.name && styles.selectorDisabledText
-            ]}>
+            <Text style={[styles.selectorText, !formData.year && styles.selectorPlaceholder, !formData.name && styles.selectorDisabledText]}>
               {formData.year || (formData.name ? 'Selecione o ano' : 'Primeiro selecione o modelo')}
             </Text>
             {formData.name && <Feather name="chevron-down" size={20} color="#999" />}
           </TouchableOpacity>
 
+          {/* Quilometragem */}
           <Text style={styles.label}>Quilometragem (km)</Text>
           <TextInput
             style={styles.input}
@@ -465,6 +391,7 @@ export default function AddCarScreen() {
             onChangeText={(text) => handleChange('km', text)}
           />
 
+          {/* Preço */}
           <Text style={styles.label}>Preço (R$)</Text>
           <TextInput
             style={styles.input}
@@ -475,27 +402,17 @@ export default function AddCarScreen() {
             onChangeText={(text) => handleChange('price', text)}
           />
 
-          <Text style={styles.label}>Imagem do Veículo</Text>
-          <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage}>
-            <Feather name="camera" size={20} color="#fff" />
-            <Text style={styles.imagePickerButtonText}>Selecionar Imagem</Text>
-          </TouchableOpacity>
-
-          {formData.imageUri ? (
-            <View style={styles.imagePreviewContainer}>
-              <Image source={{ uri: formData.imageUri }} style={styles.imagePreview} />
-              <TouchableOpacity
-                style={styles.removeImageButton}
-                onPress={() => setFormData(prev => ({ ...prev, imageUri: '' }))}
-              >
-                <Feather name="x" size={20} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <Text style={styles.helperText}>
-              Nenhuma imagem selecionada. Toque no botão acima para escolher uma foto.
-            </Text>
-          )}
+          {/* URL da Imagem */}
+          <Text style={styles.label}>URL da Imagem</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="https://exemplo.com/foto.jpg"
+            placeholderTextColor="#999"
+            value={formData.imageUrl}
+            onChangeText={(text) => handleChange('imageUrl', text)}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
 
           <TouchableOpacity
             style={[styles.submitButton, loading && styles.buttonDisabled]}
@@ -528,14 +445,9 @@ export default function AddCarScreen() {
               data={availableBrands}
               keyExtractor={(item) => item}
               renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.modalItem}
-                  onPress={() => handleBrandSelect(item)}
-                >
+                <TouchableOpacity style={styles.modalItem} onPress={() => handleBrandSelect(item)}>
                   <Text style={styles.modalItemText}>{item}</Text>
-                  {formData.brand === item && (
-                    <Feather name="check" size={20} color="#d32f2f" />
-                  )}
+                  {formData.brand === item && <Feather name="check" size={20} color="#d32f2f" />}
                 </TouchableOpacity>
               )}
               showsVerticalScrollIndicator={false}
@@ -558,19 +470,14 @@ export default function AddCarScreen() {
               data={availableNames}
               keyExtractor={(item) => item}
               renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.modalItem}
-                  onPress={() => handleNameSelect(item)}
-                >
+                <TouchableOpacity style={styles.modalItem} onPress={() => handleNameSelect(item)}>
                   <View style={styles.modalItemContent}>
                     <Text style={styles.modalItemText}>{item}</Text>
                     <Text style={styles.yearRangeText}>
                       {`${carDatabase[formData.brand]?.[item]?.yearStart} - ${carDatabase[formData.brand]?.[item]?.yearEnd}`}
                     </Text>
                   </View>
-                  {formData.name === item && (
-                    <Feather name="check" size={20} color="#d32f2f" />
-                  )}
+                  {formData.name === item && <Feather name="check" size={20} color="#d32f2f" />}
                 </TouchableOpacity>
               )}
               showsVerticalScrollIndicator={false}
@@ -593,14 +500,9 @@ export default function AddCarScreen() {
               data={availableVersions}
               keyExtractor={(item) => item}
               renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.modalItem}
-                  onPress={() => handleVersionSelect(item)}
-                >
+                <TouchableOpacity style={styles.modalItem} onPress={() => handleVersionSelect(item)}>
                   <Text style={styles.modalItemText}>{item}</Text>
-                  {formData.model === item && (
-                    <Feather name="check" size={20} color="#d32f2f" />
-                  )}
+                  {formData.model === item && <Feather name="check" size={20} color="#d32f2f" />}
                 </TouchableOpacity>
               )}
               showsVerticalScrollIndicator={false}
@@ -623,14 +525,9 @@ export default function AddCarScreen() {
               data={availableYears}
               keyExtractor={(item) => item}
               renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.modalItem}
-                  onPress={() => handleYearSelect(item)}
-                >
+                <TouchableOpacity style={styles.modalItem} onPress={() => handleYearSelect(item)}>
                   <Text style={styles.modalItemText}>{item}</Text>
-                  {formData.year === item && (
-                    <Feather name="check" size={20} color="#d32f2f" />
-                  )}
+                  {formData.year === item && <Feather name="check" size={20} color="#d32f2f" />}
                 </TouchableOpacity>
               )}
               showsVerticalScrollIndicator={false}
@@ -834,4 +731,40 @@ const styles = StyleSheet.create({
     color: '#999',
     marginLeft: 8,
   },
+
+    // Banner de sucesso verde
+  successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#c8e6c9',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 16,
+    gap: 8,
+  },
+  successText: {
+    color: '#2e7d32',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  // Modal de confirmação (caso queira usar o popup no futuro)
+  successModal: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 30,
+    alignItems: 'center',
+    gap: 15,
+  },
+  successTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  successSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 5,
+  },
+
 });

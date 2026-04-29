@@ -1,25 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  Modal,
-  FlatList,
-  Image,
+  View, Text, StyleSheet, SafeAreaView, TextInput, TouchableOpacity,
+  ScrollView, Alert, ActivityIndicator, Modal, FlatList,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
-import { database } from '../../services/connectionFirebase';
-import { ref, update, get } from 'firebase/database';
+import { fetchCars, updateCars, Car } from '../../services/jsonbinService';
 
+// ---------- Banco de marcas/modelos (COMPLETO) ----------
 interface CarModelInfo {
   versions: string[];
   yearStart: number;
@@ -207,14 +195,16 @@ const generateYearList = (start: number, end: number): string[] => {
   return years.reverse();
 };
 
-interface CarData {
+// ---------- Interface do formulário ----------
+interface EditFormData {
   name: string;
   brand: string;
   model: string;
-  year: number;
-  km: number;
-  price: number;
-  image: string;
+  year: string;
+  km: string;
+  price: string;
+  imageUrl: string;
+  currentImageUrl: string;
 }
 
 export default function EditCarScreen() {
@@ -222,19 +212,21 @@ export default function EditCarScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [successMessage, setSuccessMessage] = useState('');
+
   const [brandModalVisible, setBrandModalVisible] = useState(false);
   const [nameModalVisible, setNameModalVisible] = useState(false);
   const [versionModalVisible, setVersionModalVisible] = useState(false);
   const [yearModalVisible, setYearModalVisible] = useState(false);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<EditFormData>({
     name: '',
     brand: '',
     model: '',
     year: '',
     km: '',
     price: '',
-    imageUri: '',
+    imageUrl: '',
     currentImageUrl: '',
   });
 
@@ -244,61 +236,60 @@ export default function EditCarScreen() {
   const [, setCurrentYearRange] = useState({ start: 2000, end: 2026 });
 
   useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => setSuccessMessage(''), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
+
+  useEffect(() => {
     const loadCarData = async () => {
       if (!id) {
         Alert.alert('Erro', 'ID do veículo não encontrado');
         router.back();
         return;
       }
-
       try {
-        const carRef = ref(database, `cars/${id}`);
-        const snapshot = await get(carRef);
-
-        if (snapshot.exists()) {
-          const carData = snapshot.val() as CarData;
-          setFormData({
-            name: carData.name || '',
-            brand: carData.brand || '',
-            model: carData.model || '',
-            year: carData.year ? carData.year.toString() : '',
-            km: carData.km ? carData.km.toString() : '',
-            price: carData.price ? carData.price.toString() : '',
-            imageUri: '',
-            currentImageUrl: carData.image || '',
-          });
-
-          if (carData.brand) {
-            const names = Object.keys(carDatabase[carData.brand] || {});
-            setAvailableNames(names);
-
-            if (carData.name) {
-              const modelInfo = carDatabase[carData.brand]?.[carData.name];
-              if (modelInfo) {
-                setCurrentYearRange({ start: modelInfo.yearStart, end: modelInfo.yearEnd });
-                const years = generateYearList(modelInfo.yearStart, modelInfo.yearEnd);
-                setAvailableYears(years);
-                setAvailableVersions(modelInfo.versions);
-              }
-            }
-          }
-        } else {
+        const allCars = await fetchCars();
+        const car = allCars.find(c => c.id === id);
+        if (!car) {
           Alert.alert('Erro', 'Veículo não encontrado');
           router.back();
+          return;
+        }
+        setFormData({
+          name: car.name,
+          brand: car.brand,
+          model: car.model,
+          year: car.year.toString(),
+          km: car.km.toString(),
+          price: car.price.toString(),
+          imageUrl: '',
+          currentImageUrl: car.image,
+        });
+        if (car.brand) {
+          const names = Object.keys(carDatabase[car.brand] || {});
+          setAvailableNames(names);
+          if (car.name) {
+            const modelInfo = carDatabase[car.brand]?.[car.name];
+            if (modelInfo) {
+              setCurrentYearRange({ start: modelInfo.yearStart, end: modelInfo.yearEnd });
+              setAvailableYears(generateYearList(modelInfo.yearStart, modelInfo.yearEnd));
+              setAvailableVersions(modelInfo.versions);
+            }
+          }
         }
       } catch (error) {
-        console.error('Erro ao carregar veículo:', error);
         Alert.alert('Erro', 'Não foi possível carregar os dados do veículo');
         router.back();
       } finally {
         setInitialLoading(false);
       }
     };
-
     loadCarData();
   }, [id, router]);
 
-  const handleChange = (field: string, value: string) => {
+  const handleChange = (field: keyof EditFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -317,14 +308,7 @@ export default function EditCarScreen() {
       setCurrentYearRange({ start: modelInfo.yearStart, end: modelInfo.yearEnd });
       const years = generateYearList(modelInfo.yearStart, modelInfo.yearEnd);
       setAvailableYears(years);
-
-      setFormData(prev => ({
-        ...prev,
-        name,
-        model: '',
-        year: years[0] || ''
-      }));
-
+      setFormData(prev => ({ ...prev, name, model: '', year: years[0] || '' }));
       setAvailableVersions(modelInfo.versions);
     }
     setNameModalVisible(false);
@@ -340,69 +324,15 @@ export default function EditCarScreen() {
     setYearModalVisible(false);
   };
 
-  const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permissão necessária', 'Precisamos de acesso à sua galeria para selecionar uma imagem.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      setFormData(prev => ({ ...prev, imageUri: result.assets[0].uri }));
-    }
-  };
-
-  const convertImageToBase64 = async (uri: string): Promise<string> => {
-    const manipulatedImage = await ImageManipulator.manipulateAsync(
-      uri,
-      [{ resize: { width: 800 } }],
-      { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG }
-    );
-
-    const response = await fetch(manipulatedImage.uri);
-    const blob = await response.blob();
-
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        resolve(base64String);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  };
-
   const validateForm = () => {
-    if (!formData.brand.trim()) {
-      Alert.alert('Erro', 'Marca é obrigatória');
-      return false;
-    }
-    if (!formData.name.trim()) {
-      Alert.alert('Erro', 'Nome do veículo é obrigatório');
-      return false;
-    }
-    if (!formData.model.trim()) {
-      Alert.alert('Erro', 'Versão/Modelo é obrigatório');
-      return false;
-    }
-    if (!formData.year.trim() || isNaN(Number(formData.year))) {
-      Alert.alert('Erro', 'Ano inválido');
-      return false;
-    }
-    if (!formData.km.trim() || isNaN(Number(formData.km))) {
-      Alert.alert('Erro', 'Quilometragem inválida');
-      return false;
-    }
-    if (!formData.price.trim() || isNaN(Number(formData.price))) {
-      Alert.alert('Erro', 'Preço inválido');
+    if (!formData.brand.trim()) { Alert.alert('Erro', 'Marca é obrigatória'); return false; }
+    if (!formData.name.trim()) { Alert.alert('Erro', 'Nome do veículo é obrigatório'); return false; }
+    if (!formData.model.trim()) { Alert.alert('Erro', 'Versão/Modelo é obrigatório'); return false; }
+    if (!formData.year.trim() || isNaN(Number(formData.year))) { Alert.alert('Erro', 'Ano inválido'); return false; }
+    if (!formData.km.trim() || isNaN(Number(formData.km))) { Alert.alert('Erro', 'Quilometragem inválida'); return false; }
+    if (!formData.price.trim() || isNaN(Number(formData.price))) { Alert.alert('Erro', 'Preço inválido'); return false; }
+    if (!formData.imageUrl.trim() && !formData.currentImageUrl) {
+      Alert.alert('Erro', 'É necessário informar uma URL de imagem');
       return false;
     }
     return true;
@@ -410,37 +340,32 @@ export default function EditCarScreen() {
 
   const handleUpdate = async () => {
     if (!validateForm()) return;
-    if (!id) return;
-
     setLoading(true);
     try {
-      let finalImage = formData.currentImageUrl;
+      const finalImage = formData.imageUrl.trim() || formData.currentImageUrl;
 
-      if (formData.imageUri) {
-        finalImage = await convertImageToBase64(formData.imageUri);
-      }
+      const allCars = await fetchCars();
+      const updatedCars = allCars.map(car => {
+        if (car.id === id) {
+          return {
+            ...car,
+            name: formData.name,
+            brand: formData.brand,
+            model: formData.model,
+            year: parseInt(formData.year),
+            km: parseInt(formData.km),
+            price: parseInt(formData.price),
+            image: finalImage,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return car;
+      });
 
-      const carRef = ref(database, `cars/${id}`);
-      const updatedCar = {
-        name: formData.name,
-        brand: formData.brand,
-        model: formData.model,
-        year: parseInt(formData.year),
-        km: parseInt(formData.km),
-        price: parseInt(formData.price),
-        image: finalImage,
-        updatedAt: new Date().toISOString(),
-      };
-
-      await update(carRef, updatedCar);
-
-      Alert.alert(
-        'Sucesso!',
-        'Veículo atualizado com sucesso!',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
+      await updateCars(updatedCars);
+      setSuccessMessage('✓ Veículo atualizado com sucesso!');
+      setTimeout(() => router.back(), 1500);
     } catch (error: any) {
-      console.error('Erro ao atualizar veículo:', error);
       Alert.alert('Erro', `Não foi possível atualizar o veículo.\n${error.message}`);
     } finally {
       setLoading(false);
@@ -469,7 +394,15 @@ export default function EditCarScreen() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {successMessage !== '' && (
+          <View style={styles.successBanner}>
+            <Feather name="check-circle" size={20} color="#2e7d32" />
+            <Text style={styles.successText}>{successMessage}</Text>
+          </View>
+        )}
+
         <View style={styles.formCard}>
+          {/* Marca */}
           <Text style={styles.label}>Marca</Text>
           <TouchableOpacity style={styles.selector} onPress={() => setBrandModalVisible(true)}>
             <Text style={[styles.selectorText, !formData.brand && styles.selectorPlaceholder]}>
@@ -478,54 +411,46 @@ export default function EditCarScreen() {
             <Feather name="chevron-down" size={20} color="#999" />
           </TouchableOpacity>
 
+          {/* Nome do Veículo */}
           <Text style={styles.label}>Nome do Veículo</Text>
           <TouchableOpacity
             style={[styles.selector, !formData.brand && styles.selectorDisabled]}
             onPress={() => formData.brand && setNameModalVisible(true)}
             disabled={!formData.brand}
           >
-            <Text style={[
-              styles.selectorText,
-              !formData.name && styles.selectorPlaceholder,
-              !formData.brand && styles.selectorDisabledText
-            ]}>
+            <Text style={[styles.selectorText, !formData.name && styles.selectorPlaceholder, !formData.brand && styles.selectorDisabledText]}>
               {formData.name || (formData.brand ? 'Selecione o modelo' : 'Primeiro selecione a marca')}
             </Text>
             {formData.brand && <Feather name="chevron-down" size={20} color="#999" />}
           </TouchableOpacity>
 
+          {/* Versão ou Modelo */}
           <Text style={styles.label}>Versão ou Modelo</Text>
           <TouchableOpacity
             style={[styles.selector, !formData.name && styles.selectorDisabled]}
             onPress={() => formData.name && setVersionModalVisible(true)}
             disabled={!formData.name}
           >
-            <Text style={[
-              styles.selectorText,
-              !formData.model && styles.selectorPlaceholder,
-              !formData.name && styles.selectorDisabledText
-            ]}>
+            <Text style={[styles.selectorText, !formData.model && styles.selectorPlaceholder, !formData.name && styles.selectorDisabledText]}>
               {formData.model || (formData.name ? 'Selecione a versão' : 'Primeiro selecione o modelo')}
             </Text>
             {formData.name && <Feather name="chevron-down" size={20} color="#999" />}
           </TouchableOpacity>
 
+          {/* Ano */}
           <Text style={styles.label}>Ano</Text>
           <TouchableOpacity
             style={[styles.selector, !formData.name && styles.selectorDisabled]}
             onPress={() => formData.name && setYearModalVisible(true)}
             disabled={!formData.name}
           >
-            <Text style={[
-              styles.selectorText,
-              !formData.year && styles.selectorPlaceholder,
-              !formData.name && styles.selectorDisabledText
-            ]}>
+            <Text style={[styles.selectorText, !formData.year && styles.selectorPlaceholder, !formData.name && styles.selectorDisabledText]}>
               {formData.year || (formData.name ? 'Selecione o ano' : 'Primeiro selecione o modelo')}
             </Text>
             {formData.name && <Feather name="chevron-down" size={20} color="#999" />}
           </TouchableOpacity>
 
+          {/* Quilometragem */}
           <Text style={styles.label}>Quilometragem (km)</Text>
           <TextInput
             style={styles.input}
@@ -536,6 +461,7 @@ export default function EditCarScreen() {
             onChangeText={(text) => handleChange('km', text)}
           />
 
+          {/* Preço */}
           <Text style={styles.label}>Preço (R$)</Text>
           <TextInput
             style={styles.input}
@@ -546,38 +472,20 @@ export default function EditCarScreen() {
             onChangeText={(text) => handleChange('price', text)}
           />
 
-          <Text style={styles.label}>Imagem do Veículo</Text>
-
-          {!formData.imageUri && formData.currentImageUrl ? (
-            <View style={styles.imagePreviewContainer}>
-              <Image source={{ uri: formData.currentImageUrl }} style={styles.imagePreview} />
-              <Text style={styles.currentImageLabel}>Imagem atual</Text>
-            </View>
-          ) : null}
-
-          <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage}>
-            <Feather name="camera" size={20} color="#fff" />
-            <Text style={styles.imagePickerButtonText}>
-              {formData.currentImageUrl ? 'Trocar Imagem' : 'Selecionar Imagem'}
-            </Text>
-          </TouchableOpacity>
-
-          {formData.imageUri ? (
-            <View style={styles.imagePreviewContainer}>
-              <Image source={{ uri: formData.imageUri }} style={styles.imagePreview} />
-              <TouchableOpacity
-                style={styles.removeImageButton}
-                onPress={() => setFormData(prev => ({ ...prev, imageUri: '' }))}
-              >
-                <Feather name="x" size={20} color="#fff" />
-              </TouchableOpacity>
-              <Text style={styles.newImageLabel}>Nova imagem selecionada</Text>
-            </View>
-          ) : null}
-
-          {!formData.imageUri && !formData.currentImageUrl && (
+          {/* URL da Imagem */}
+          <Text style={styles.label}>URL da Imagem</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="https://exemplo.com/foto.jpg"
+            placeholderTextColor="#999"
+            value={formData.imageUrl}
+            onChangeText={(text) => handleChange('imageUrl', text)}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {formData.currentImageUrl !== '' && formData.imageUrl.trim() === '' && (
             <Text style={styles.helperText}>
-              Nenhuma imagem selecionada. Toque no botão acima para escolher uma foto.
+              Imagem atual: {formData.currentImageUrl.substring(0, 40)}...
             </Text>
           )}
 
@@ -612,14 +520,9 @@ export default function EditCarScreen() {
               data={availableBrands}
               keyExtractor={(item) => item}
               renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.modalItem}
-                  onPress={() => handleBrandSelect(item)}
-                >
+                <TouchableOpacity style={styles.modalItem} onPress={() => handleBrandSelect(item)}>
                   <Text style={styles.modalItemText}>{item}</Text>
-                  {formData.brand === item && (
-                    <Feather name="check" size={20} color="#d32f2f" />
-                  )}
+                  {formData.brand === item && <Feather name="check" size={20} color="#d32f2f" />}
                 </TouchableOpacity>
               )}
               showsVerticalScrollIndicator={false}
@@ -642,19 +545,14 @@ export default function EditCarScreen() {
               data={availableNames}
               keyExtractor={(item) => item}
               renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.modalItem}
-                  onPress={() => handleNameSelect(item)}
-                >
+                <TouchableOpacity style={styles.modalItem} onPress={() => handleNameSelect(item)}>
                   <View style={styles.modalItemContent}>
                     <Text style={styles.modalItemText}>{item}</Text>
                     <Text style={styles.yearRangeText}>
                       {`${carDatabase[formData.brand]?.[item]?.yearStart} - ${carDatabase[formData.brand]?.[item]?.yearEnd}`}
                     </Text>
                   </View>
-                  {formData.name === item && (
-                    <Feather name="check" size={20} color="#d32f2f" />
-                  )}
+                  {formData.name === item && <Feather name="check" size={20} color="#d32f2f" />}
                 </TouchableOpacity>
               )}
               showsVerticalScrollIndicator={false}
@@ -677,14 +575,9 @@ export default function EditCarScreen() {
               data={availableVersions}
               keyExtractor={(item) => item}
               renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.modalItem}
-                  onPress={() => handleVersionSelect(item)}
-                >
+                <TouchableOpacity style={styles.modalItem} onPress={() => handleVersionSelect(item)}>
                   <Text style={styles.modalItemText}>{item}</Text>
-                  {formData.model === item && (
-                    <Feather name="check" size={20} color="#d32f2f" />
-                  )}
+                  {formData.model === item && <Feather name="check" size={20} color="#d32f2f" />}
                 </TouchableOpacity>
               )}
               showsVerticalScrollIndicator={false}
@@ -707,14 +600,9 @@ export default function EditCarScreen() {
               data={availableYears}
               keyExtractor={(item) => item}
               renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.modalItem}
-                  onPress={() => handleYearSelect(item)}
-                >
+                <TouchableOpacity style={styles.modalItem} onPress={() => handleYearSelect(item)}>
                   <Text style={styles.modalItemText}>{item}</Text>
-                  {formData.year === item && (
-                    <Feather name="check" size={20} color="#d32f2f" />
-                  )}
+                  {formData.year === item && <Feather name="check" size={20} color="#d32f2f" />}
                 </TouchableOpacity>
               )}
               showsVerticalScrollIndicator={false}
@@ -950,4 +838,21 @@ const styles = StyleSheet.create({
     color: '#999',
     marginLeft: 8,
   },
+
+    successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#c8e6c9',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 16,
+    gap: 8,
+  },
+  successText: {
+    color: '#2e7d32',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  
 });

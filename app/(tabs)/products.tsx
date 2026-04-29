@@ -16,10 +16,9 @@ import {
   Dimensions,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { database } from '../../services/connectionFirebase';
-import { ref, onValue, remove } from 'firebase/database';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useAdmin } from '../../hooks/useAdmin';
+import { fetchCars, updateCars, Car } from '../../services/jsonbinService';
 
 // Filtros (mantidos iguais)
 const brands = [
@@ -45,17 +44,6 @@ const priceRanges = [
   { label: 'Acima de R$ 120.000', min: 120000, max: Infinity },
 ];
 
-interface Car {
-  id: string;
-  name: string;
-  brand: string;
-  model: string;
-  year: number;
-  km: number;
-  price: number;
-  image: string;
-}
-
 export default function ProductsScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
@@ -74,9 +62,7 @@ export default function ProductsScreen() {
       setNumColumns(calculateNumColumns());
     };
     const subscription = Dimensions.addEventListener('change', updateColumns);
-    return () => {
-      subscription?.remove();
-    };
+    return () => subscription?.remove();
   }, [calculateNumColumns]);
 
   const [cars, setCars] = useState<Car[]>([]);
@@ -99,27 +85,24 @@ export default function ProductsScreen() {
   const [selectedCar, setSelectedCar] = useState<Car | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
-    const carsRef = ref(database, 'cars');
-    const unsubscribe = onValue(carsRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        const carsList = Object.entries(data).map(([id, value]: [string, any]) => ({
-          id,
-          ...value,
-        }));
-        setCars(carsList);
-      } else {
-        setCars([]);
-      }
-      setLoading(false);
-    }, (error) => {
-      console.error('Erro ao carregar carros:', error);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
+  // Carrega carros sempre que a tela ganha foco
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      const loadCars = async () => {
+        try {
+          const data = await fetchCars();
+          if (isActive) setCars(data);
+        } catch (error) {
+          Alert.alert('Erro', 'Não foi possível carregar os veículos.');
+        } finally {
+          if (isActive) setLoading(false);
+        }
+      };
+      loadCars();
+      return () => { isActive = false; };
+    }, [])
+  );
 
   const clearTempFilters = () => {
     setTempSearchText('');
@@ -169,17 +152,17 @@ export default function ProductsScreen() {
 
   const handleDeleteCar = async () => {
     if (!selectedCar) return;
-
     setDeleting(true);
     try {
-      const carRef = ref(database, `cars/${selectedCar.id}`);
-      await remove(carRef);
+      const currentCars = await fetchCars();
+      const updatedCars = currentCars.filter(car => car.id !== selectedCar.id);
+      await updateCars(updatedCars);
+      setCars(updatedCars);
       Alert.alert('Sucesso!', 'Veículo removido com sucesso!');
       setDeleteModalVisible(false);
       setSelectedCar(null);
     } catch (error) {
-      console.error('Erro ao deletar veículo:', error);
-      Alert.alert('Erro', 'Não foi possível remover o veículo. Tente novamente.');
+      Alert.alert('Erro', 'Não foi possível remover o veículo.');
     } finally {
       setDeleting(false);
     }
@@ -197,15 +180,12 @@ export default function ProductsScreen() {
       }
 
       if (selectedBrand !== 'Todas' && car.brand !== selectedBrand) return false;
-
       if (selectedYear !== 'Todos') {
         const yearNum = parseInt(selectedYear);
         if (!isNaN(yearNum) && car.year !== yearNum) return false;
       }
-
       if (car.km < selectedKmRange.min || car.km > selectedKmRange.max) return false;
       if (car.price < selectedPriceRange.min || car.price > selectedPriceRange.max) return false;
-
       return true;
     });
   }, [cars, searchText, selectedBrand, selectedYear, selectedKmRange, selectedPriceRange]);
@@ -231,7 +211,7 @@ export default function ProductsScreen() {
         }
       ]}>
       <Image
-        source={{ uri: item.image }} // Agora direto, sem fallback aleatório
+        source={{ uri: item.image }}
         style={[styles.cardImage, { height: cardWidth * 0.7 }]}
       />
       <View style={styles.cardInfo}>
@@ -241,14 +221,10 @@ export default function ProductsScreen() {
         <Text style={styles.cardPrice}>{`R$ ${item.price.toLocaleString('pt-BR')}`}</Text>
         {isAdmin && (
           <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={() => confirmEdit(item)}>
+            <TouchableOpacity style={styles.editButton} onPress={() => confirmEdit(item)}>
               <Feather name="edit-2" size={16} color="#fff" />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.deleteButton}
-              onPress={() => confirmDelete(item)}>
+            <TouchableOpacity style={styles.deleteButton} onPress={() => confirmDelete(item)}>
               <Feather name="trash-2" size={16} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -321,7 +297,7 @@ export default function ProductsScreen() {
         />
       </View>
 
-      {/* Modal dos Filtros (mantido exatamente igual) */}
+      {/* Modal dos Filtros (mantido igual ao original) */}
       <Modal visible={filterModalVisible} transparent animationType="none">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -365,9 +341,7 @@ export default function ProductsScreen() {
                   }}
                 />
                 {tempYear !== 'Todos' && (
-                  <TouchableOpacity
-                    style={styles.clearYearButton}
-                    onPress={() => setTempYear('Todos')}>
+                  <TouchableOpacity style={styles.clearYearButton} onPress={() => setTempYear('Todos')}>
                     <Feather name="x" size={18} color="#666" />
                   </TouchableOpacity>
                 )}
@@ -414,7 +388,7 @@ export default function ProductsScreen() {
         </View>
       </Modal>
 
-      {/* Modal de Confirmação para deletar */}
+      {/* Modal de exclusão */}
       <Modal visible={deleteModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.deleteModalContainer}>
@@ -422,14 +396,10 @@ export default function ProductsScreen() {
               <Feather name="alert-triangle" size={40} color="#d32f2f" />
               <Text style={styles.deleteModalTitle}>Remover Veículo</Text>
             </View>
-
             <Text style={styles.deleteModalText}>
               {`Tem certeza que deseja remover o veículo "${selectedCar?.name} ${selectedCar?.model}"?`}
             </Text>
-            <Text style={styles.deleteModalWarning}>
-              Esta ação não pode ser desfeita.
-            </Text>
-
+            <Text style={styles.deleteModalWarning}>Esta ação não pode ser desfeita.</Text>
             <View style={styles.deleteModalActions}>
               <TouchableOpacity
                 style={styles.cancelDeleteButton}
@@ -439,7 +409,6 @@ export default function ProductsScreen() {
                 }}>
                 <Text style={styles.cancelDeleteText}>Cancelar</Text>
               </TouchableOpacity>
-
               <TouchableOpacity
                 style={[styles.confirmDeleteButton, deleting && styles.buttonDisabled]}
                 onPress={handleDeleteCar}
