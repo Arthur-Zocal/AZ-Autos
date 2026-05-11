@@ -13,11 +13,10 @@ import { Feather } from '@expo/vector-icons';
 
 export default function WelcomeScreen() {
   const router = useRouter();
-  const { width, height } = useWindowDimensions();
+  const { width } = useWindowDimensions(); 
 
   const isSmallDevice = width < 375;
   const isTinyDevice = width < 320;
-  const isLandscape = width > height;
 
   const handleLogin = () => {
     router.push('/login');

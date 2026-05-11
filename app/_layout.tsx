@@ -1,5 +1,6 @@
 import { Slot, useRouter, useSegments } from 'expo-router';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { CartProvider } from '../contexts/CartContext';
 import { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 
@@ -19,7 +20,7 @@ function RootLayoutNav() {
     } else if (user && isAtRoot) {
       router.replace('/(tabs)/products');
     }
-  }, [user, loading, segments]);
+  }, [user, loading, segments, router]);
 
   if (loading) {
     return (
@@ -35,7 +36,9 @@ function RootLayoutNav() {
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <RootLayoutNav />
+      <CartProvider>
+        <RootLayoutNav />
+      </CartProvider>
     </AuthProvider>
   );
 }

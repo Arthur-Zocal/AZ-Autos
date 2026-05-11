@@ -19,8 +19,9 @@ import { Feather } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useAdmin } from '../../hooks/useAdmin';
 import { fetchCars, updateCars, Car } from '../../services/jsonbinService';
+import { useCart } from '../../contexts/CartContext';
 
-// Filtros (mantidos iguais)
+// Filtros
 const brands = [
   'Todas', 'Fiat', 'Volkswagen', 'Chevrolet', 'Ford', 'Hyundai',
   'Toyota', 'Renault', 'Honda', 'Nissan', 'Peugeot', 'Citroën',
@@ -47,6 +48,8 @@ const priceRanges = [
 export default function ProductsScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
+  const { addToCart, getTotalItems } = useCart();
+  const totalItems = getTotalItems();
 
   const calculateNumColumns = useCallback(() => {
     if (width >= 1024) return 3;
@@ -85,7 +88,6 @@ export default function ProductsScreen() {
   const [selectedCar, setSelectedCar] = useState<Car | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Carrega carros sempre que a tela ganha foco
   useFocusEffect(
     useCallback(() => {
       let isActive = true;
@@ -93,7 +95,7 @@ export default function ProductsScreen() {
         try {
           const data = await fetchCars();
           if (isActive) setCars(data);
-        } catch (error) {
+        } catch {
           Alert.alert('Erro', 'Não foi possível carregar os veículos.');
         } finally {
           if (isActive) setLoading(false);
@@ -161,7 +163,7 @@ export default function ProductsScreen() {
       Alert.alert('Sucesso!', 'Veículo removido com sucesso!');
       setDeleteModalVisible(false);
       setSelectedCar(null);
-    } catch (error) {
+    } catch {
       Alert.alert('Erro', 'Não foi possível remover o veículo.');
     } finally {
       setDeleting(false);
@@ -219,6 +221,13 @@ export default function ProductsScreen() {
         <Text style={styles.cardDetail} numberOfLines={1}>{`${item.brand} - ${item.model}`}</Text>
         <Text style={styles.cardDetail}>{`${item.year} • ${item.km.toLocaleString()} km`}</Text>
         <Text style={styles.cardPrice}>{`R$ ${item.price.toLocaleString('pt-BR')}`}</Text>
+        
+        {/* Botão Comprar para todos */}
+        <TouchableOpacity style={styles.buyButton} onPress={() => addToCart(item)}>
+          <Feather name="shopping-cart" size={16} color="#fff" />
+          <Text style={styles.buyButtonText}>Comprar</Text>
+        </TouchableOpacity>
+
         {isAdmin && (
           <View style={styles.actionButtons}>
             <TouchableOpacity style={styles.editButton} onPress={() => confirmEdit(item)}>
@@ -253,10 +262,21 @@ export default function ProductsScreen() {
             <TouchableOpacity onPress={openFilterModal} style={styles.headerButton}>
               <Feather name="filter" size={24} color="#fff" />
             </TouchableOpacity>
+
+            {/* Ícone do Carrinho com badge */}
+            <TouchableOpacity onPress={() => router.push('/cart')} style={styles.headerButton}>
+              <View>
+                <Feather name="shopping-cart" size={24} color="#fff" />
+                {totalItems > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{totalItems > 99 ? '99+' : totalItems}</Text>
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+
             {isAdmin && (
-              <TouchableOpacity
-                onPress={() => router.push('/addCar')}
-                style={styles.headerButton}>
+              <TouchableOpacity onPress={() => router.push('/addCar')} style={styles.headerButton}>
                 <Feather name="plus" size={24} color="#fff" />
               </TouchableOpacity>
             )}
@@ -297,7 +317,7 @@ export default function ProductsScreen() {
         />
       </View>
 
-      {/* Modal dos Filtros (mantido igual ao original) */}
+      {/* Modal dos Filtros */}
       <Modal visible={filterModalVisible} transparent animationType="none">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -427,7 +447,6 @@ export default function ProductsScreen() {
   );
 }
 
-// Estilos (mantidos exatamente iguais)
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -536,6 +555,22 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#d32f2f',
     marginTop: 6,
+  },
+  buyButton: {
+    flexDirection: 'row',
+    backgroundColor: '#d32f2f',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 10,
+  },
+  buyButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   actionButtons: {
     position: 'absolute',
@@ -737,5 +772,22 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.7,
+  },
+  badge: {
+    position: 'absolute',
+    top: -8,
+    right: -12,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: '#d32f2f',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
 });

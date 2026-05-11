@@ -36,7 +36,7 @@ export default function ProfileScreen() {
           setUserData(snapshot.val());
           setLoading(false);
         },
-        (_error) => {
+        () => {
           console.error('Erro ao carregar dados:');
           setLoading(false);
         }
@@ -49,7 +49,7 @@ export default function ProfileScreen() {
     try {
       await logout();
       router.replace('/login');
-    } catch (error) {
+    } catch {
       Alert.alert('Erro', 'Não foi possível sair');
     }
   };
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
   },
   value: {
     fontSize: 16,
-    color: '#666',
+    color: '#667',
     flex: 1, 
     textAlign: 'right',
     marginLeft: 10,
