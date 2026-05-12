@@ -1,4 +1,3 @@
-// services/imageService.ts
 const IMGBB_API_KEY = 'd7ae0482e2e32bde038367e9ee1acbe7';
 
 export const uploadImage = async (uri: string): Promise<string> => {

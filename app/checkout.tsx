@@ -1,4 +1,3 @@
-// app/checkout.tsx
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -14,7 +13,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { useCart } from '../contexts/CartContext';
 import { useRouter } from 'expo-router';
-import { getAllCoupons, Coupon } from '../services/couponBinService';
+import { fetchCoupons, Coupon } from '../services/couponService';
 
 type ShippingType = 'normal' | 'expresso';
 
@@ -66,17 +65,16 @@ export default function CheckoutScreen() {
   const subtotal = getTotalPrice();
   const total = subtotal + shippingPrice - discount;
 
-  // Carregar cupons do JSONBin
   useEffect(() => {
-    const fetchCoupons = async () => {
+    const loadCoupons = async () => {
       try {
-        const data = await getAllCoupons();
+        const data = await fetchCoupons();
         setCouponsList(data);
       } catch (error) {
         console.error('Erro ao carregar cupons', error);
       }
     };
-    fetchCoupons();
+    loadCoupons();
   }, []);
 
   const calculateShipping = (addressData: any, type: ShippingType) => {
@@ -134,19 +132,19 @@ export default function CheckoutScreen() {
     const coupon = couponsList[code];
     if (!coupon || !coupon.active) {
       setDiscount(0);
-      setCouponMessage('❌ Cupom inválido ou expirado');
+      setCouponMessage('Cupom inválido ou expirado');
       return;
     }
     if (coupon.type === 'percentage') {
       const discountValue = subtotal * (coupon.value / 100);
       setDiscount(discountValue);
-      setCouponMessage(`✅ Cupom ${code}: ${coupon.value}% de desconto`);
+      setCouponMessage(`Cupom ${code}: ${coupon.value}% de desconto`);
     } else if (coupon.type === 'free_shipping') {
       setDiscount(shippingPrice);
-      setCouponMessage(`✅ Cupom ${code}: frete grátis`);
+      setCouponMessage(`Cupom ${code}: frete grátis`);
     } else {
       setDiscount(0);
-      setCouponMessage('❌ Cupom não aplicável');
+      setCouponMessage('Cupom não aplicável');
     }
   };
 
@@ -171,7 +169,6 @@ export default function CheckoutScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header padrão do projeto */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Feather name="arrow-left" size={24} color="#fff" />

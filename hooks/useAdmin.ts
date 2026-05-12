@@ -1,38 +1,36 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { database } from '../services/connectionFirebase';
-import { ref, get } from 'firebase/database';
+import { ref, onValue } from 'firebase/database';
 
-export function useAdmin() {
-  const { user } = useAuth();
+export const useAdmin = () => {
+  const { user, loading: authLoading } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const checkAdmin = async () => {
-      if (!user) {
-        setIsAdmin(false);
-        setLoading(false);
-        return;
-      }
+    if (!user) {
+      console.log('useAdmin: sem usuário, isAdmin = false');
+      setIsAdmin(false);
+      setLoading(false);
+      return;
+    }
 
-      try {
-        const userRef = ref(database, `users/${user.uid}`);
-        const snapshot = await get(userRef);
-        const userData = snapshot.val();
-        
-        // Verifica se o role é "admin"
-        setIsAdmin(userData?.role === "admin");
-      } catch (error) {
-        console.error('Erro ao verificar admin:', error);
-        setIsAdmin(false);
-      } finally {
-        setLoading(false);
-      }
-    };
+    console.log(`useAdmin: usuário ${user.uid} - buscando role...`);
+    const roleRef = ref(database, `users/${user.uid}/role`);
+    const unsubscribe = onValue(roleRef, (snapshot) => {
+      const role = snapshot.val();
+      console.log(`useAdmin: role encontrado = ${role}`);
+      setIsAdmin(role === 'admin');
+      setLoading(false);
+    }, (error) => {
+      console.error('Erro ao buscar role:', error);
+      setIsAdmin(false);
+      setLoading(false);
+    });
 
-    checkAdmin();
+    return () => unsubscribe();
   }, [user]);
 
-  return { isAdmin, loading };
-}
+  return { isAdmin, loading: loading || authLoading };
+};

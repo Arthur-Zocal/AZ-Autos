@@ -275,11 +275,7 @@ export default function ProductsScreen() {
               </View>
             </TouchableOpacity>
 
-            {isAdmin && (
-              <TouchableOpacity onPress={() => router.push('/addCar')} style={styles.headerButton}>
-                <Feather name="plus" size={24} color="#fff" />
-              </TouchableOpacity>
-            )}
+            {/* Ícone de + removido conforme solicitado */}
           </View>
         </View>
         <Text style={styles.headerSubtitle}>Encontre o carro dos seus sonhos!</Text>

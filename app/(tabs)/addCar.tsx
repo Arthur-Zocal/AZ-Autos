@@ -113,7 +113,7 @@ export default function AddCarScreen() {
       setSuccessMessage('✓ Veículo adicionado com sucesso!');
       setTimeout(() => {
         setSuccessMessage('');
-        router.replace('/(tabs)/products');
+        router.replace('/(tabs)/management');
       }, 2000);
     } catch (error: any) {
       console.error('Erro ao adicionar veículo:', error);
@@ -126,7 +126,7 @@ export default function AddCarScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.replace('/(tabs)/management')} style={styles.backButton}>
           <Feather name="arrow-left" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Adicionar Veículo</Text>
@@ -241,7 +241,7 @@ export default function AddCarScreen() {
         </View>
       </ScrollView>
 
-      {/* Modal Marca */}
+      {/* Modais (idênticos ao original) */}
       <Modal visible={brandModalVisible} transparent animationType="slide" onRequestClose={() => setBrandModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -266,7 +266,6 @@ export default function AddCarScreen() {
         </View>
       </Modal>
 
-      {/* Modal Nome */}
       <Modal visible={nameModalVisible} transparent animationType="slide" onRequestClose={() => setNameModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -296,7 +295,6 @@ export default function AddCarScreen() {
         </View>
       </Modal>
 
-      {/* Modal Versão */}
       <Modal visible={versionModalVisible} transparent animationType="slide" onRequestClose={() => setVersionModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -321,7 +319,6 @@ export default function AddCarScreen() {
         </View>
       </Modal>
 
-      {/* Modal Ano */}
       <Modal visible={yearModalVisible} transparent animationType="slide" onRequestClose={() => setYearModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>

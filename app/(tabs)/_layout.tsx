@@ -1,9 +1,19 @@
 import { Tabs } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
+import { useAdmin } from '../../hooks/useAdmin';
+import { View, ActivityIndicator } from 'react-native';
 
-// Rodapé do app
+function TabLayoutContent() {
+  const { isAdmin, loading } = useAdmin();
 
-export default function TabLayout() {
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#d32f2f" />
+      </View>
+    );
+  }
+
   return (
     <Tabs
       screenOptions={{
@@ -18,47 +28,38 @@ export default function TabLayout() {
           borderTopWidth: 1,
           borderTopColor: '#eee',
         },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '500',
-        },
+        tabBarLabelStyle: { fontSize: 12, fontWeight: '500' },
       }}
     >
       <Tabs.Screen
         name="products"
-        options={{
-          title: 'Produtos',
-          tabBarIcon: ({ color }) => <Feather name="shopping-bag" size={24} color={color} />,
-        }}
+        options={{ title: 'Produtos', tabBarIcon: ({ color }) => <Feather name="shopping-bag" size={24} color={color} /> }}
       />
       <Tabs.Screen
         name="about"
-        options={{
-          title: 'Sobre',
-          tabBarIcon: ({ color }) => <Feather name="info" size={24} color={color} />,
-        }}
+        options={{ title: 'Sobre', tabBarIcon: ({ color }) => <Feather name="info" size={24} color={color} /> }}
       />
       <Tabs.Screen
         name="profile"
-        options={{
-          title: 'Perfil',
-          tabBarIcon: ({ color }) => <Feather name="user" size={24} color={color} />,
-        }}
+        options={{ title: 'Perfil', tabBarIcon: ({ color }) => <Feather name="user" size={24} color={color} /> }}
       />
       <Tabs.Screen
-        name="addCar"
+        name="management"
         options={{
-          title: 'Adicionar',
-          tabBarIcon: ({ color }) => <Feather name="plus-circle" size={24} color={color} />,
-          href: null, // Não aparece no rodapé
+          title: 'Management',
+          tabBarIcon: ({ color }) => <Feather name="settings" size={24} color={color} />,
+          href: isAdmin ? undefined : null,  
         }}
       />
-      <Tabs.Screen
-        name="editCar"
-        options={{
-          href: null, // Não aparece no rodapé
-        }}
-      />
+
+      {/* Rotas ocultas */}
+      <Tabs.Screen name="addCar" options={{ href: null }} />
+      <Tabs.Screen name="editCar" options={{ href: null }} />
+      <Tabs.Screen name="manageCoupons" options={{ href: null }} />
     </Tabs>
   );
+}
+
+export default function TabLayout() {
+  return <TabLayoutContent />;
 }

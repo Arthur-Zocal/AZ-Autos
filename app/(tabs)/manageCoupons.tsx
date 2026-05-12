@@ -1,190 +1,219 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, TextInput, TouchableOpacity,
-  FlatList, Alert, ActivityIndicator, Switch, Modal,
+  ScrollView, Alert, ActivityIndicator, Switch, Modal,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAdmin } from '../../hooks/useAdmin';
-import { getAllCoupons, saveCoupon, deleteCoupon, Coupon } from '../../services/couponBinService';
+import { fetchCoupons, saveCoupon, deleteCoupon, Coupon } from '../../services/couponService';
 
 export default function ManageCouponsScreen() {
   const router = useRouter();
   const { isAdmin, loading: adminLoading } = useAdmin();
+
   const [coupons, setCoupons] = useState<Record<string, Coupon>>({});
   const [loading, setLoading] = useState(true);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [editingCode, setEditingCode] = useState('');
-  const [formData, setFormData] = useState({
-    code: '',
-    type: 'percentage' as 'percentage' | 'free_shipping',
-    value: '',
-    description: '',
-    active: true,
-  });
+  const [newCode, setNewCode] = useState('');
+  const [newValue, setNewValue] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [selectedCoupon, setSelectedCoupon] = useState<{ code: string; description: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    if (!isAdmin && !adminLoading) {
+    if (!adminLoading && !isAdmin) {
       Alert.alert('Acesso negado', 'Apenas administradores podem acessar.');
-      router.back();
-      return;
+      router.replace('/(tabs)/products');
     }
-    loadCoupons();
-  }, [isAdmin, adminLoading]);
+  }, [isAdmin, adminLoading, router]);
 
   const loadCoupons = async () => {
     try {
-      const data = await getAllCoupons();
+      const data = await fetchCoupons();
       setCoupons(data);
-    } catch (error) {
-      Alert.alert('Erro', 'Não foi possível carregar os cupons.');
+    } catch {
+      Alert.alert('Erro', 'Não foi possível carregar cupons');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSave = async () => {
-    const code = formData.code.trim().toUpperCase();
-    if (!code) {
-      Alert.alert('Erro', 'Informe o código do cupom.');
+  useEffect(() => { if (isAdmin) loadCoupons(); }, [isAdmin]);
+
+  const handleAddCoupon = async () => {
+    const code = newCode.trim().toUpperCase();
+    if (!code) { Alert.alert('Erro', 'Digite o código do cupom'); return; }
+    const percent = parseFloat(newValue);
+    if (isNaN(percent) || percent <= 0 || percent > 100) {
+      Alert.alert('Erro', 'Percentual deve ser entre 1 e 100');
       return;
     }
-    if (formData.type === 'percentage') {
-      const value = parseFloat(formData.value);
-      if (isNaN(value) || value <= 0 || value > 100) {
-        Alert.alert('Erro', 'Valor percentual deve ser entre 1 e 100.');
-        return;
-      }
+    try {
       await saveCoupon(code, {
         type: 'percentage',
-        value,
-        active: formData.active,
-        description: formData.description,
+        value: percent,
+        active: true,
+        description: newDesc.trim() || `${percent}% de desconto`,
       });
-    } else {
-      await saveCoupon(code, {
-        type: 'free_shipping',
-        value: 0,
-        active: formData.active,
-        description: formData.description,
-      });
+      setNewCode('');
+      setNewValue('');
+      setNewDesc('');
+      setSuccessMessage('✓ Cupom criado com sucesso!');
+      await loadCoupons();
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch {
+      Alert.alert('Erro', 'Não foi possível criar o cupom');
     }
+  };
+
+  const confirmDelete = (code: string, description: string) => {
+    setSelectedCoupon({ code, description });
+    setDeleteModalVisible(true);
+  };
+
+  const handleDeleteCoupon = async () => {
+    if (!selectedCoupon) return;
+    setDeleting(true);
+    try {
+      await deleteCoupon(selectedCoupon.code);
+      await loadCoupons();
+      Alert.alert('Sucesso!', 'Cupom removido com sucesso!');
+      setDeleteModalVisible(false);
+      setSelectedCoupon(null);
+    } catch {
+      Alert.alert('Erro', 'Não foi possível remover o cupom.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleToggleActive = async (code: string, currentActive: boolean) => {
+    const coupon = coupons[code];
+    if (!coupon) return;
+    const updatedCoupon = { ...coupon, active: !currentActive };
+    await saveCoupon(code, updatedCoupon);
     await loadCoupons();
-    setModalVisible(false);
-    resetForm();
   };
 
-  const resetForm = () => {
-    setFormData({
-      code: '',
-      type: 'percentage',
-      value: '',
-      description: '',
-      active: true,
-    });
-    setEditingCode('');
-  };
-
-  const handleDelete = async (code: string) => {
-    Alert.alert('Confirmar', `Remover cupom ${code}?`, [
-      { text: 'Cancelar' },
-      { text: 'Remover', onPress: async () => {
-          await deleteCoupon(code);
-          await loadCoupons();
-        } },
-    ]);
-  };
-
-  if (adminLoading || loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color="#d32f2f" />
-      </SafeAreaView>
-    );
-  }
+  if (adminLoading) return <ActivityIndicator size="large" color="#d32f2f" style={{ flex: 1 }} />;
+  if (!isAdmin) return null;
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.replace('/(tabs)/management')} style={styles.backButton}>
           <Feather name="arrow-left" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Cupons</Text>
-        <TouchableOpacity onPress={() => setModalVisible(true)} style={styles.addButton}>
-          <Feather name="plus" size={24} color="#fff" />
-        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Gerenciar cupons</Text>
+        <View style={{ width: 24 }} />
       </View>
 
-      <FlatList
-        data={Object.entries(coupons)}
-        keyExtractor={([code]) => code}
-        renderItem={({ item: [code, coupon] }) => (
-          <View style={styles.couponCard}>
-            <View style={styles.couponInfo}>
-              <Text style={styles.couponCode}>{code}</Text>
-              <Text style={styles.couponDesc}>{coupon.description}</Text>
-              <Text style={styles.couponType}>
-                {coupon.type === 'percentage' ? `${coupon.value}% OFF` : 'Frete Grátis'}
-              </Text>
-              <Text style={[styles.couponStatus, coupon.active ? styles.active : styles.inactive]}>
-                {coupon.active ? 'Ativo' : 'Inativo'}
-              </Text>
-            </View>
-            <TouchableOpacity onPress={() => handleDelete(code)} style={styles.deleteButton}>
-              <Feather name="trash-2" size={20} color="#d32f2f" />
-            </TouchableOpacity>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {successMessage !== '' && (
+          <View style={styles.successBanner}>
+            <Feather name="check-circle" size={20} color="#2e7d32" />
+            <Text style={styles.successText}>{successMessage}</Text>
           </View>
         )}
-        ListEmptyComponent={<Text style={styles.empty}>Nenhum cupom cadastrado</Text>}
-      />
 
-      {/* Modal de criar/editar */}
-      <Modal visible={modalVisible} animationType="slide" transparent>
+        {/* Card de criar cupom */}
+        <View style={styles.formCard}>
+          <Text style={styles.cardTitle}>Criar novo cupom</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Código (ex: DESCONTO10)"
+            placeholderTextColor="#999"
+            value={newCode}
+            onChangeText={setNewCode}
+            autoCapitalize="characters"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Percentual de desconto (1 a 100)"
+            placeholderTextColor="#999"
+            keyboardType="numeric"
+            value={newValue}
+            onChangeText={setNewValue}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Descrição (ex: 10% de desconto)"
+            placeholderTextColor="#999"
+            value={newDesc}
+            onChangeText={setNewDesc}
+          />
+          <TouchableOpacity style={styles.submitButton} onPress={handleAddCoupon}>
+            <Text style={styles.submitButtonText}>Criar cupom</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Card de listagem de cupons */}
+        <View style={styles.formCard}>
+          <Text style={styles.cardTitle}>Cupons existentes</Text>
+          {loading ? (
+            <ActivityIndicator size="small" color="#d32f2f" />
+          ) : Object.keys(coupons).length === 0 ? (
+            <Text style={styles.emptyText}>Nenhum cupom cadastrado.</Text>
+          ) : (
+            Object.entries(coupons).map(([code, coup]) => (
+              <View key={code} style={styles.couponRow}>
+                <View style={styles.couponInfo}>
+                  <Text style={styles.couponCode}>{code}</Text>
+                  <Text style={styles.couponDesc}>{coup.description}</Text>
+                  <Text style={styles.couponType}>
+                    {coup.type === 'percentage' ? `${coup.value}% OFF` : 'Frete Grátis'}
+                  </Text>
+                </View>
+                <View style={styles.rowActions}>
+                  <Switch
+                    value={coup.active}
+                    onValueChange={() => handleToggleActive(code, coup.active)}
+                    trackColor={{ false: '#767577', true: '#d32f2f' }}
+                    thumbColor={coup.active ? '#fff' : '#f4f3f4'}
+                  />
+                  <TouchableOpacity onPress={() => confirmDelete(code, coup.description)} style={styles.deleteButton}>
+                    <Feather name="trash-2" size={22} color="#d32f2f" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+      </ScrollView>
+
+      {/* Modal de exclusão (mesmo estilo dos carros) */}
+      <Modal visible={deleteModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>Novo cupom</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Código (ex: DESCONTO10)"
-              value={formData.code}
-              onChangeText={text => setFormData(prev => ({ ...prev, code: text }))}
-              autoCapitalize="characters"
-            />
-            <View style={styles.switchRow}>
-              <Text>Tipo percentual</Text>
-              <Switch
-                value={formData.type === 'percentage'}
-                onValueChange={(val) => setFormData(prev => ({ ...prev, type: val ? 'percentage' : 'free_shipping' }))}
-              />
+          <View style={styles.deleteModalContainer}>
+            <View style={styles.deleteModalHeader}>
+              <Feather name="alert-triangle" size={40} color="#d32f2f" />
+              <Text style={styles.deleteModalTitle}>Remover Cupom</Text>
             </View>
-            {formData.type === 'percentage' && (
-              <TextInput
-                style={styles.input}
-                placeholder="Percentual (ex: 10)"
-                keyboardType="numeric"
-                value={formData.value}
-                onChangeText={text => setFormData(prev => ({ ...prev, value: text }))}
-              />
-            )}
-            <TextInput
-              style={styles.input}
-              placeholder="Descrição"
-              value={formData.description}
-              onChangeText={text => setFormData(prev => ({ ...prev, description: text }))}
-            />
-            <View style={styles.switchRow}>
-              <Text>Ativo</Text>
-              <Switch
-                value={formData.active}
-                onValueChange={(val) => setFormData(prev => ({ ...prev, active: val }))}
-              />
-            </View>
-            <View style={styles.modalButtons}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => { setModalVisible(false); resetForm(); }}>
-                <Text>Cancelar</Text>
+            <Text style={styles.deleteModalText}>
+              {`Tem certeza que deseja remover o cupom "${selectedCoupon?.code}"?`}
+            </Text>
+            <Text style={styles.deleteModalWarning}>Esta ação não pode ser desfeita.</Text>
+            <View style={styles.deleteModalActions}>
+              <TouchableOpacity
+                style={styles.cancelDeleteButton}
+                onPress={() => {
+                  setDeleteModalVisible(false);
+                  setSelectedCoupon(null);
+                }}>
+                <Text style={styles.cancelDeleteText}>Cancelar</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-                <Text style={{ color: '#fff' }}>Salvar</Text>
+              <TouchableOpacity
+                style={[styles.confirmDeleteButton, deleting && styles.buttonDisabled]}
+                onPress={handleDeleteCoupon}
+                disabled={deleting}>
+                {deleting ? (
+                  <ActivityIndicator color="#ffffff" size="small" />
+                ) : (
+                  <Text style={styles.confirmDeleteText}>Remover</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -195,35 +224,212 @@ export default function ManageCouponsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
   header: {
-    backgroundColor: '#d32f2f', paddingVertical: 20, paddingHorizontal: 24,
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    borderBottomLeftRadius: 20, borderBottomRightRadius: 20,
+    backgroundColor: '#d32f2f',
+    paddingVertical: 20,
+    paddingHorizontal: 24,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
-  backButton: { padding: 4 },
-  headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
-  addButton: { padding: 4 },
-  couponCard: {
-    backgroundColor: '#fff', marginHorizontal: 20, marginVertical: 8,
-    padding: 16, borderRadius: 12, flexDirection: 'row', justifyContent: 'space-between',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, elevation: 3,
+  backButton: {
+    padding: 4,
   },
-  couponInfo: { flex: 1 },
-  couponCode: { fontSize: 16, fontWeight: 'bold', color: '#d32f2f' },
-  couponDesc: { fontSize: 14, color: '#666', marginTop: 4 },
-  couponType: { fontSize: 12, color: '#333', marginTop: 4 },
-  couponStatus: { fontSize: 12, marginTop: 4 },
-  active: { color: '#2e7d32' },
-  inactive: { color: '#999' },
-  deleteButton: { padding: 8 },
-  empty: { textAlign: 'center', marginTop: 40, color: '#999' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  modalContainer: { backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '80%' },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
-  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 10, marginBottom: 12 },
-  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  modalButtons: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 },
-  cancelBtn: { flex: 1, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#ddd', borderRadius: 8, marginRight: 8 },
-  saveBtn: { flex: 1, padding: 12, alignItems: 'center', backgroundColor: '#d32f2f', borderRadius: 8, marginLeft: 8 },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  content: {
+    flex: 1,
+    padding: 20,
+  },
+  formCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#d32f2f',
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+    marginTop: 12,
+  },
+  input: {
+    backgroundColor: '#f9f9f9',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#333',
+    marginBottom: 12,
+  },
+  selector: {
+    backgroundColor: '#f9f9f9',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  submitButton: {
+    backgroundColor: '#d32f2f',
+    borderRadius: 12,
+    paddingVertical: 14,
+    marginTop: 8,
+    alignItems: 'center',
+  },
+  submitButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  couponRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  couponInfo: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  couponCode: {
+    fontWeight: 'bold',
+    fontSize: 16,
+    color: '#333',
+  },
+  couponDesc: {
+    color: '#666',
+    fontSize: 14,
+    marginTop: 2,
+  },
+  couponType: {
+    fontSize: 12,
+    marginTop: 2,
+    color: '#d32f2f',
+  },
+  rowActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  deleteButton: {
+    padding: 4,
+  },
+  successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#c8e6c9',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 16,
+    gap: 8,
+  },
+  successText: {
+    color: '#2e7d32',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: '#999',
+    marginTop: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteModalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 24,
+    width: '80%',
+    alignItems: 'center',
+  },
+  deleteModalHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  deleteModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 12,
+  },
+  deleteModalText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  deleteModalWarning: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  deleteModalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  cancelDeleteButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    alignItems: 'center',
+  },
+  cancelDeleteText: {
+    fontSize: 16,
+    color: '#666',
+    fontWeight: '600',
+  },
+  confirmDeleteButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#d32f2f',
+    alignItems: 'center',
+  },
+  confirmDeleteText: {
+    fontSize: 16,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  buttonDisabled: {
+    opacity: 0.7,
+  },
 });
