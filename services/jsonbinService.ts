@@ -1,4 +1,3 @@
-// services/jsonbinService.ts
 const JSONBIN_URL = 'https://api.jsonbin.io/v3/b/69f22c3036566621a8074290';
 const JSONBIN_API_KEY = '$2a$10$qGjJzTXcxvG/xvDRQ.z4muLRUu1Ityf0BZ6.uvP.KogB7VaHVVGny';
 

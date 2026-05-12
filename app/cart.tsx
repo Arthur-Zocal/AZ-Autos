@@ -13,7 +13,7 @@ import { useCart, CartItem } from '../contexts/CartContext';
 import { useRouter } from 'expo-router';
 
 export default function CartScreen() {
-  const { cartItems, updateQuantity, removeFromCart, getTotalPrice } = useCart();
+  const { cartItems, updateQuantity, removeFromCart, getTotalPrice, clearCart } = useCart();
   const router = useRouter();
 
   const subtotal = getTotalPrice();
@@ -23,7 +23,9 @@ export default function CartScreen() {
       <Image source={{ uri: item.car.image }} style={styles.image} />
       <View style={styles.info}>
         <Text style={styles.name}>{item.car.name} {item.car.model}</Text>
-        <Text style={styles.price}>R$ {item.car.price.toLocaleString('pt-BR')}</Text>
+        <Text style={styles.price}>
+          R$ {item.car.price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </Text>
         <View style={styles.quantityContainer}>
           <TouchableOpacity
             onPress={() => updateQuantity(item.car.id, item.quantity - 1)}
@@ -52,7 +54,7 @@ export default function CartScreen() {
         <View style={styles.empty}>
           <Feather name="shopping-cart" size={60} color="#ccc" />
           <Text style={styles.emptyText}>Seu carrinho está vazio</Text>
-          <TouchableOpacity onPress={() => router.back()} style={styles.continueButton}>
+          <TouchableOpacity onPress={() => router.replace('/(tabs)/products')} style={styles.continueButton}>
             <Text style={styles.continueText}>Continuar comprando</Text>
           </TouchableOpacity>
         </View>
@@ -62,10 +64,9 @@ export default function CartScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header com botão voltar */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Feather name="arrow-left" size={24} color="#d32f2f" />
+        <TouchableOpacity onPress={() => router.replace('/(tabs)/products')} style={styles.backButton}>
+          <Feather name="arrow-left" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Meu Carrinho</Text>
         <View style={{ width: 24 }} />
@@ -79,19 +80,23 @@ export default function CartScreen() {
         showsVerticalScrollIndicator={false}
       />
 
-      {/* Subtotal e botão Avançar */}
       <View style={styles.footer}>
         <View style={styles.subtotalRow}>
           <Text style={styles.subtotalLabel}>Subtotal:</Text>
-          <Text style={styles.subtotalValue}>R$ {subtotal.toFixed(2)}</Text>
+          <Text style={styles.subtotalValue}>
+            R$ {subtotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </Text>
         </View>
-        <TouchableOpacity
-          style={styles.nextButton}
-          onPress={() => router.push('/checkout')}
-        >
-          <Text style={styles.nextButtonText}>Avançar</Text>
-          <Feather name="arrow-right" size={20} color="#fff" />
-        </TouchableOpacity>
+        <View style={styles.actionButtonsRow}>
+          <TouchableOpacity onPress={clearCart} style={styles.clearButton}>
+            <Feather name="trash-2" size={18} color="#d32f2f" />
+            <Text style={styles.clearText}>Limpar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.nextButton} onPress={() => router.push('/checkout')}>
+            <Text style={styles.nextButtonText}>Avançar</Text>
+            <Feather name="arrow-right" size={20} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -103,45 +108,45 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
   },
   header: {
+    backgroundColor: '#d32f2f',
+    paddingVertical: 20,
+    paddingHorizontal: 24,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
   backButton: {
-    padding: 8,
+    padding: 4,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#d32f2f',
+    color: '#fff',
   },
   listContent: {
+    paddingHorizontal: 20,
     paddingBottom: 20,
     paddingTop: 8,
   },
   cartItem: {
     flexDirection: 'row',
     backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginVertical: 8,
+    borderRadius: 16,
+    marginBottom: 16,
     padding: 12,
-    borderRadius: 12,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   image: {
-    width: 70,
-    height: 70,
-    borderRadius: 8,
+    width: 80,
+    height: 80,
+    borderRadius: 12,
     backgroundColor: '#eee',
     marginRight: 12,
   },
@@ -169,7 +174,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0f0',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 6,
+    borderRadius: 8,
   },
   quantity: {
     marginHorizontal: 12,
@@ -182,7 +187,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     backgroundColor: '#fff',
-    padding: 16,
+    padding: 20,
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',
   },
@@ -201,12 +206,34 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#d32f2f',
   },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  clearButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#d32f2f',
+    borderRadius: 12,
+    paddingVertical: 12,
+  },
+  clearText: {
+    color: '#d32f2f',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   nextButton: {
-    backgroundColor: '#d32f2f',
+    flex: 2,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 14,
+    backgroundColor: '#d32f2f',
+    paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 12,
   },
@@ -219,7 +246,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
+    paddingHorizontal: 24,
   },
   emptyText: {
     fontSize: 16,
@@ -229,12 +256,13 @@ const styles = StyleSheet.create({
   continueButton: {
     marginTop: 20,
     backgroundColor: '#d32f2f',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
   },
   continueText: {
     color: '#fff',
     fontWeight: '600',
+    fontSize: 16,
   },
 });

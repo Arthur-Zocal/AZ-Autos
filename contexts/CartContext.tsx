@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from './AuthContext';
 import { Car } from '../services/jsonbinService';
+import { loadCart, saveCart } from '../services/cartBinService';
 
 export interface CartItem {
   car: Car;
@@ -22,23 +23,35 @@ const CartContext = createContext<CartContextData>({} as CartContextData);
 export const useCart = () => useContext(CartContext);
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user } = useAuth();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
+  // Carregar carrinho do usuário sempre que o usuário mudar
   useEffect(() => {
-    const loadCart = async () => {
+    const fetchCart = async () => {
+      if (!user) {
+        setCartItems([]);
+        setLoading(false);
+        return;
+      }
       try {
-        const stored = await AsyncStorage.getItem('@cart');
-        if (stored) setCartItems(JSON.parse(stored));
+        const items = await loadCart(user.uid);
+        setCartItems(items);
       } catch (error) {
         console.error('Erro ao carregar carrinho:', error);
+      } finally {
+        setLoading(false);
       }
     };
-    loadCart();
-  }, []);
+    fetchCart();
+  }, [user]);
 
+  // Salvar no JSONBin sempre que o carrinho mudar (e usuário logado)
   useEffect(() => {
-    AsyncStorage.setItem('@cart', JSON.stringify(cartItems));
-  }, [cartItems]);
+    if (!user || loading) return;
+    saveCart(user.uid, cartItems).catch(console.error);
+  }, [cartItems, user, loading]);
 
   const addToCart = (car: Car) => {
     setCartItems(prev => {
