@@ -7,27 +7,16 @@ import {
   TouchableOpacity,
   Image,
   SafeAreaView,
-  Alert,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useCart, CartItem } from '../contexts/CartContext';
 import { useRouter } from 'expo-router';
 
 export default function CartScreen() {
-  const { cartItems, updateQuantity, removeFromCart, getTotalPrice, clearCart } = useCart();
+  const { cartItems, updateQuantity, removeFromCart, getTotalPrice } = useCart();
   const router = useRouter();
 
-  const handleCheckout = () => {
-    if (cartItems.length === 0) {
-      Alert.alert('Carrinho vazio', 'Adicione alguns carros antes de finalizar.');
-      return;
-    }
-    Alert.alert(
-      'Compra finalizada',
-      `Total: R$ ${getTotalPrice().toLocaleString('pt-BR')}\n\nObrigado pela compra!`,
-      [{ text: 'OK', onPress: () => clearCart() }]
-    );
-  };
+  const subtotal = getTotalPrice();
 
   const renderCartItem = ({ item }: { item: CartItem }) => (
     <View style={styles.cartItem}>
@@ -73,6 +62,15 @@ export default function CartScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header com botão voltar */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Feather name="arrow-left" size={24} color="#d32f2f" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Meu Carrinho</Text>
+        <View style={{ width: 24 }} />
+      </View>
+
       <FlatList
         data={cartItems}
         keyExtractor={(item) => item.car.id}
@@ -80,19 +78,19 @@ export default function CartScreen() {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />
+
+      {/* Subtotal e botão Avançar */}
       <View style={styles.footer}>
-        <View style={styles.totalContainer}>
-          <Text style={styles.totalLabel}>Total:</Text>
-          <Text style={styles.totalValue}>
-            R$ {getTotalPrice().toLocaleString('pt-BR')}
-          </Text>
+        <View style={styles.subtotalRow}>
+          <Text style={styles.subtotalLabel}>Subtotal:</Text>
+          <Text style={styles.subtotalValue}>R$ {subtotal.toFixed(2)}</Text>
         </View>
-        <TouchableOpacity style={styles.checkoutButton} onPress={handleCheckout}>
-          <Text style={styles.checkoutText}>Finalizar compra</Text>
+        <TouchableOpacity
+          style={styles.nextButton}
+          onPress={() => router.push('/checkout')}
+        >
+          <Text style={styles.nextButtonText}>Avançar</Text>
           <Feather name="arrow-right" size={20} color="#fff" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={clearCart} style={styles.clearButton}>
-          <Text style={styles.clearText}>Limpar carrinho</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -104,8 +102,26 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#d32f2f',
+  },
   listContent: {
-    paddingBottom: 20,      // espaço extra antes do footer
+    paddingBottom: 20,
     paddingTop: 8,
   },
   cartItem: {
@@ -169,24 +185,23 @@ const styles = StyleSheet.create({
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',
-    // Remove absolute positioning
   },
-  totalContainer: {
+  subtotalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  totalLabel: {
-    fontSize: 18,
+  subtotalLabel: {
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
   },
-  totalValue: {
-    fontSize: 20,
+  subtotalValue: {
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#d32f2f',
   },
-  checkoutButton: {
+  nextButton: {
     backgroundColor: '#d32f2f',
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -195,18 +210,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 12,
   },
-  checkoutText: {
+  nextButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  clearButton: {
-    marginTop: 12,
-    alignItems: 'center',
-  },
-  clearText: {
-    color: '#999',
-    fontSize: 14,
   },
   empty: {
     flex: 1,

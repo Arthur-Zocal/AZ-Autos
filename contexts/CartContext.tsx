@@ -24,7 +24,6 @@ export const useCart = () => useContext(CartContext);
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
-  // Carregar carrinho salvo ao iniciar
   useEffect(() => {
     const loadCart = async () => {
       try {
@@ -37,7 +36,6 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadCart();
   }, []);
 
-  // Salvar sempre que mudar
   useEffect(() => {
     AsyncStorage.setItem('@cart', JSON.stringify(cartItems));
   }, [cartItems]);
