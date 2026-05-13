@@ -44,10 +44,18 @@ export default function ManagementScreen() {
           <Text style={styles.cardTitle}>Gerenciar cupons</Text>
           <Text style={styles.cardDesc}>Criar, editar ou remover cupons de desconto</Text>
         </TouchableOpacity>
+
+        {/* NOVO CARD: Enviar aviso por e-mail */}
+        <TouchableOpacity style={styles.card} onPress={() => router.push('../manageNotifications')}>
+          <Feather name="bell" size={40} color="#d32f2f" />
+          <Text style={styles.cardTitle}>Enviar aviso</Text>
+          <Text style={styles.cardDesc}>Enviar notificação por e-mail para todos os usuários</Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 }
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   header: {
