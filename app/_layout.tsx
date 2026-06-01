@@ -1,8 +1,11 @@
+import { useEffect } from 'react';
 import { Slot, useRouter, useSegments } from 'expo-router';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { CartProvider } from '../contexts/CartContext';
-import { useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Platform } from 'react-native';
+import { registerForPushNotifications } from '../services/notificationService';
+import { database } from '../services/connectionFirebase';
+import { ref, onChildAdded } from 'firebase/database';
 
 function RootLayoutNav() {
   const { user, loading } = useAuth();
@@ -10,10 +13,38 @@ function RootLayoutNav() {
   const router = useRouter();
 
   useEffect(() => {
+    if (user && Platform.OS === 'web') {
+      console.log('Usuário logado, registrando para notificações...');
+      registerForPushNotifications(user.uid);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || Platform.OS !== 'web') return;
+
+    console.log(' Listener configurado! Aguardando novas notificações...');
+    const notifRef = ref(database, 'notifications');
+
+    const unsubscribe = onChildAdded(notifRef, (snapshot) => {
+      console.log('🟢 Notificação recebida:', snapshot.key, snapshot.val());
+      const data = snapshot.val();
+      if (data && Notification.permission === 'granted') {
+        new Notification(data.title, { body: data.message });
+        console.log(' Notificação exibida no navegador');
+      }
+    });
+
+    return () => {
+      console.log('🧹 Listener desmontado');
+      unsubscribe();
+    };
+  }, [user]);
+
+  useEffect(() => {
     if (loading) return;
 
     const inAuthGroup = segments[0] === '(tabs)';
-    const isAtRoot = !segments[0]; 
+    const isAtRoot = !segments[0];
 
     if (!user && inAuthGroup) {
       router.replace('/login');

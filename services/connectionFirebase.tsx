@@ -13,13 +13,12 @@ const firebaseConfig = {
   databaseURL: "https://az-autos-projeto-default-rtdb.firebaseio.com/"
 };
 
-// Previne inicialização duplicada
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const database = getDatabase(app);
 const storage = getStorage(app);
 
-console.log('✅ Firebase configurado');
-console.log('📦 Storage bucket:', storage.app.options.storageBucket);
+console.log('Firebase configurado');
+console.log('Storage bucket:', storage.app.options.storageBucket);
 
-export { auth, database, storage };
+export { auth, database, storage, app }; 
