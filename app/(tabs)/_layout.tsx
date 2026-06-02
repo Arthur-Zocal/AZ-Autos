@@ -57,6 +57,7 @@ function TabLayoutContent() {
       <Tabs.Screen name="editCar" options={{ href: null }} />
       <Tabs.Screen name="manageNotifications" options={{ href: null }} />
       <Tabs.Screen name="manageCoupons" options={{ href: null }} />
+      <Tabs.Screen name="myPurchases" options={{ href: null }} />
     </Tabs>
   );
 }

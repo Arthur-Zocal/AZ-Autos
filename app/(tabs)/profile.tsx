@@ -12,6 +12,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { database } from '../../services/connectionFirebase';
 import { ref, onValue } from 'firebase/database';
+import { Feather } from '@expo/vector-icons';
 
 interface UserData {
   firstName: string;
@@ -103,6 +104,15 @@ export default function ProfileScreen() {
           </Text>
         </View>
 
+        {/* 🔹 NOVO BOTÃO MINHAS COMPRAS */}
+        <TouchableOpacity
+          style={styles.purchasesButton}
+          onPress={() => router.push('/myPurchases')}
+        >
+          <Feather name="shopping-bag" size={20} color="#fff" style={{ marginRight: 8 }} />
+          <Text style={styles.purchasesButtonText}>Minhas Compras</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutText}>Sair</Text>
         </TouchableOpacity>
@@ -157,13 +167,29 @@ const styles = StyleSheet.create({
     color: '#d32f2f',
     fontWeight: 'bold',
   },
+  purchasesButton: {
+    backgroundColor: '#d32f2f',
+    borderRadius: 8,
+    height: 48,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 20,
+    width: '90%',
+    maxWidth: 600,
+  },
+  purchasesButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
   logoutButton: {
     backgroundColor: '#d32f2f',
     borderRadius: 8,
     height: 48,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 30,
+    marginTop: 10,
     width: '90%', 
     maxWidth: 600,
   },

@@ -13,7 +13,10 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useCart } from '../contexts/CartContext';
+import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'expo-router';
+import { database } from '../services/connectionFirebase';
+import { ref, push } from 'firebase/database';
 import { fetchCoupons, Coupon } from '../services/couponService';
 
 type ShippingType = 'normal' | 'expresso';
@@ -49,7 +52,8 @@ const formatCep = (value: string) => {
 };
 
 export default function CheckoutScreen() {
-  const { cartItems, getTotalPrice } = useCart();
+  const { cartItems, getTotalPrice, clearCart } = useCart();
+  const { user } = useAuth();
   const router = useRouter();
 
   const [cep, setCep] = useState('');
@@ -149,34 +153,69 @@ export default function CheckoutScreen() {
     }
   };
 
-  // Função para enviar notificação local
+  // Função para notificação local
   const sendLocalNotification = (title: string, body: string) => {
     if (Platform.OS === 'web' && Notification.permission === 'granted') {
       new Notification(title, { body });
     }
   };
 
-  const handleFinalize = () => {
+  const handleFinalize = async () => {
     if (!address) {
       Alert.alert('CEP não informado', 'Digite um CEP válido para continuar.');
       return;
     }
 
-    let message = `Subtotal: R$ ${subtotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
-    message += `Frete (${shippingType === 'normal' ? 'Normal' : 'Expresso'}): R$ ${shippingPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
-    if (discount > 0) message += `Desconto: - R$ ${discount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
-    message += `Total: R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+    if (!user) {
+      Alert.alert('Erro', 'Usuário não autenticado.');
+      return;
+    }
 
-    Alert.alert('Compra finalizada', message, [
-      {
-        text: 'OK',
-        onPress: () => {
-          // 🟢 Notificação local
-          sendLocalNotification('Compra finalizada', `Pedido no valor de R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} confirmado.`);
-          router.replace('/(tabs)/products');
-        },
+    // Monta os dados da compra
+    const compra = {
+      items: cartItems.map(item => ({
+        carId: item.car.id,
+        name: item.car.name,
+        model: item.car.model,
+        price: item.car.price,
+        quantity: item.quantity,
+      })),
+      subtotal,
+      shipping: shippingPrice,
+      discount,
+      total,
+      shippingType,
+      address: {
+        cep: address.cep,
+        logradouro: address.logradouro,
+        bairro: address.bairro,
+        cidade: address.cidade,
+        uf: address.uf,
       },
-    ]);
+      couponCode: couponCode.trim().toUpperCase() || null,
+      createdAt: new Date().toISOString(),
+    };
+
+    try {
+      // Salva a compra no banco
+      const comprasRef = ref(database, `compras/${user.uid}`);
+      await push(comprasRef, compra);
+
+      // Limpa o carrinho
+      clearCart();
+
+      // Notificação do sistema
+      sendLocalNotification(
+        'Compra realizada com sucesso!',
+        `Seu pedido no valor de R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} foi confirmado.`
+      );
+
+      // Redireciona para a tela de produtos
+      router.replace('/(tabs)/products');
+    } catch (error: any) {
+      Alert.alert('Erro', 'Não foi possível finalizar a compra.');
+      console.error(error);
+    }
   };
 
   if (cartItems.length === 0) {
