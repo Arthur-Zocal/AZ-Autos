@@ -37,7 +37,7 @@ function TabLayoutContent() {
       />
       <Tabs.Screen
         name="about"
-        options={{ title: 'Sobre', tabBarIcon: ({ color }) => <Feather name="info" size={24} color={color} /> }}
+        options={{ title: 'AZ Autos', tabBarIcon: ({ color }) => <Feather name="info" size={24} color={color} /> }}
       />
       <Tabs.Screen
         name="profile"

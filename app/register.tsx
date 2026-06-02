@@ -19,7 +19,7 @@ import { ref, set, get, query, orderByChild, equalTo } from 'firebase/database';
 import { Feather } from '@expo/vector-icons';
 import { Toast } from '../components/toast';
 
-// ✅ Validação de e-mail genérica (qualquer domínio)
+// Validação de e-mail genérica
 const isValidEmail = (email: string) => {
   const emailRegex = /^[^\s@]+@([^\s@]+\.)+[^\s@]+$/;
   return emailRegex.test(email);
@@ -75,7 +75,6 @@ export default function RegisterScreen() {
   });
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
   
-  // Estado para o Toast
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
@@ -314,6 +313,24 @@ export default function RegisterScreen() {
     setToastVisible(true);
   };
 
+  // Função para enviar notificação local
+  const sendLocalNotification = async (title: string, body: string) => {
+    // Verifica se é web e se a permissão já foi concedida
+    if (Platform.OS === 'web') {
+      if (Notification.permission === 'granted') {
+        new Notification(title, { body });
+      } else if (Notification.permission === 'default') {
+        // Ainda não foi perguntado; solicita agora
+        const perm = await Notification.requestPermission();
+        if (perm === 'granted') {
+          new Notification(title, { body });
+        }
+      }
+      // Se 'denied', nada acontece
+    }
+    // (futuramente poderia estender para mobile)
+  };
+
   const handleRegister = async () => {
     const isValid = await validateForm();
     if (!isValid) {
@@ -336,6 +353,9 @@ export default function RegisterScreen() {
       });
 
       showToast(`🎉 Conta criada com sucesso! Bem-vindo(a) ${firstName}!`, 'success');
+      
+      // 🟢 Notificação local
+      sendLocalNotification('Conta criada com sucesso!', `Bem-vindo(a) ${firstName}! Sua conta na AZ Autos foi criada.`);
       
       setTimeout(() => {
         router.replace('/login');
@@ -647,6 +667,7 @@ export default function RegisterScreen() {
   );
 }
 
+// Estilos permanecem os mesmos...
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,

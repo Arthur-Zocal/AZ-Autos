@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useCart } from '../contexts/CartContext';
@@ -148,17 +149,33 @@ export default function CheckoutScreen() {
     }
   };
 
+  // Função para enviar notificação local
+  const sendLocalNotification = (title: string, body: string) => {
+    if (Platform.OS === 'web' && Notification.permission === 'granted') {
+      new Notification(title, { body });
+    }
+  };
+
   const handleFinalize = () => {
     if (!address) {
       Alert.alert('CEP não informado', 'Digite um CEP válido para continuar.');
       return;
     }
+
     let message = `Subtotal: R$ ${subtotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
     message += `Frete (${shippingType === 'normal' ? 'Normal' : 'Expresso'}): R$ ${shippingPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
     if (discount > 0) message += `Desconto: - R$ ${discount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
     message += `Total: R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+
     Alert.alert('Compra finalizada', message, [
-      { text: 'OK', onPress: () => router.replace('/(tabs)/products') },
+      {
+        text: 'OK',
+        onPress: () => {
+          // 🟢 Notificação local
+          sendLocalNotification('Compra finalizada', `Pedido no valor de R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} confirmado.`);
+          router.replace('/(tabs)/products');
+        },
+      },
     ]);
   };
 
